@@ -34,7 +34,7 @@ void NeuralNetwork::forward(const float Input[]){
     }
 }
 
-void NeuralNetwork::backward(const float Input[], const float Error[]){
+void NeuralNetwork::backward(const float Input[]){
 
     /******************************************************************
     * Backpropagate errors to hidden layer
@@ -63,4 +63,8 @@ float* NeuralNetwork::get_output(){
 
 float* NeuralNetwork::get_HiddenWeights(){
     return HiddenWeights;
+}
+
+float* NeuralNetwork::get_Error(){
+    return Error;
 }

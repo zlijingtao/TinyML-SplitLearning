@@ -149,17 +149,27 @@ void train(int nb, bool only_forward) {
         ei_printf_float(myOutput[i]);
         Serial.print(" ");
     }
+    Serial.print("\r\n");
 
-    // Sending label to Server 
-    Serial.println(nb, DEC);
+    
 
     if (!only_forward) {
 
-        float Error[25] = {0.0};
+        // Sending label to Server 
+        Serial.println(nb, DEC);
+
         // Receive error from server
+        char* Error = (char*) myNetwork.get_Error();
+        for (uint16_t i = 0; i < HiddenNodes; ++i) {
+            Serial.write('n');
+            while(Serial.available() < 4) {}
+            for (int n = 0; n < 4; n++) {
+                Error[i*4+n] = Serial.read();
+            }
+        }
 
         // BACKWARD
-        myNetwork.backward(features_matrix.buffer, Error);
+        myNetwork.backward(features_matrix.buffer);
         ++num_epochs;
     }
 
@@ -181,6 +191,7 @@ void train(int nb, bool only_forward) {
     // Info to plot & graph!
     Serial.println("Done!");
 
+    Serial.println(num_epochs, DEC);
     // Print outputs
     // for (size_t i = 0; i < 3; i++) {
     //     ei_printf_float(myOutput[i]);

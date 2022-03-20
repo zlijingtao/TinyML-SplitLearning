@@ -2,6 +2,9 @@
 	"folders": [
 		{
 			"path": "."
+		},
+		{
+			"path": "../TinyML-FederatedLearning"
 		}
 	],
 	"settings": {}

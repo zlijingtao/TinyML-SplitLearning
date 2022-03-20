@@ -61,8 +61,15 @@ test_mountains = list(sum(zip(test_montserrat_files, test_pedraforca_files), ())
 
 
 def convert_string_to_array(string, one_hot = False):
-    pass #TODO: implement this
-    return string
+    if not one_hot:
+        out_act = np.fromstring(string, dtype=float, sep=' ')
+        return out_act
+    else:
+        out_label = np.zeros((3,))
+        # string = int.from_bytes(string, "big")
+        # print(string)
+        out_label[int(string.replace('b', '').replace('\'', '')) - 1] = 1 
+        return out_label
 
 def server_compute(Hidden, target, only_forward = False):
 
@@ -207,34 +214,50 @@ def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False
         
         # Receive activation from client
         outputs = device.readline().decode()
-        print(f"Outputs: ", outputs)
 
-        # Receive label from client
-        nb = device.readline()[:-2]
+        
+
 
         if only_forward:
             # Perform server-side computation (forward)
             hidden_activation = convert_string_to_array(outputs)
-            label = convert_string_to_array(nb, one_hot = True)
+            label = convert_string_to_array(str(num_button), one_hot = True)
+            print(f"Outputs: ", hidden_activation)
+            print(f"label: ", num_button)
             forward_error = server_compute(hidden_activation, label, only_forward= True)
         else:
+            # Receive label from client
+            nb = device.readline()[:-2]
+            # print(str(nb))
             # Perform server-side computation (forward/backward)
             hidden_activation = convert_string_to_array(outputs)
-            label = convert_string_to_array(nb, one_hot = True)
+            label = convert_string_to_array(str(nb), one_hot = True)
+            print(f"Outputs: ", hidden_activation)
+            print(f"label: ", label)
             forward_error, error_array = server_compute(hidden_activation, label, only_forward= False)
         
             # Send Error Array to client to continue backward #TODO: implement this
-            pass
+            for i in range(size_hidden_nodes): # hidden layer
+                d.read() # wait until confirmatio
+                float_num = error_array[i]
+                data = struct.pack('f', float_num)
+                d.write(data)
+
+            # sendmodel_confirmation = d.readline().decoder()
+            # print(f'Model sent confirmation: {sendmodel_confirmation}')
             
-            error = 0.0
-            if (error > 0.28):
-                print(f"[{device.port}] Sample {samplePath} generated an error of {error}")
+            # if (forward_error > 0.28):
+            #     print(f"[{device.port}] Sample {samplePath} generated an error of {forward_error}")
 
         # print(f"Fordward millis received: ", device.readline().decode())
         # print(f"Backward millis received: ", device.readline().decode())
         device.readline().decode() # Accept 'Done' command
-        # error = read_graph(device, deviceIndex)
 
+        ne = device.readline()[:-2]
+
+        n_epooch = int(ne)
+        graph.append([n_epooch, forward_error, deviceIndex])
+        print(f"Error: ", forward_error)
 
 def sendTestSamples(device, deviceIndex):
     global test_mountains

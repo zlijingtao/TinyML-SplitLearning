@@ -19,16 +19,19 @@ class NeuralNetwork {
 
         void initWeights();
         void forward(const float Input[]);
-        void backward(const float Input[], const float Error[]);
+        void backward(const float Input[]);
 
         float* get_output();
 
         float* get_HiddenWeights();
         
+        float* get_Error();
+        
     private:
 
         float Hidden[HiddenNodes] = {};
         float HiddenWeights[(InputNodes+1) * HiddenNodes] = {};
+        float Error[HiddenNodes] = {};
         float HiddenDelta[HiddenNodes] = {};
         float ChangeHiddenWeights[(InputNodes+1) * HiddenNodes] = {};
 
