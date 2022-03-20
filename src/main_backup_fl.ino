@@ -99,7 +99,16 @@ void init_network_model() {
         }
     }
 
-    Serial.println("Received new client-side model.");
+    char* myOutputWeights = (char*) myNetwork.get_OutputWeights();
+    for (uint16_t i = 0; i < (HiddenNodes+1) * OutputNodes; ++i) {
+        Serial.write('n');
+        while(Serial.available() < 4) {}
+        for (int n = 0; n < 4; n++) {
+            myOutputWeights[i*4+n] = Serial.read();
+        }
+    }
+
+    Serial.println("Received new model.");
 }
 
 float readFloat() {
@@ -139,39 +148,26 @@ void train(int nb, bool only_forward) {
         return;
     }
 
-    
 
-    myNetwork.forward(features_matrix.buffer);
+    float myTarget[3] = {0};
+    myTarget[nb-1] = 1.f; // button 1 -> {1,0,0};  button 2 -> {0,1,0};  button 3 -> {0,0,1}
 
-    // Sending activation/label to Server 
-    float* myOutput = myNetwork.get_output();
-    for (size_t i = 0; i < 25; i++) {
-        ei_printf_float(myOutput[i]);
-        Serial.print(" ");
-    }
-
-    // Sending label to Server 
-    Serial.println(nb, DEC);
-
+    float backward_error = 0;
     if (!only_forward) {
-
-        float Error[25] = {0.0};
-        // Receive error from server
-
         // BACKWARD
-        myNetwork.backward(features_matrix.buffer, Error);
+        backward_error = myNetwork.backward(features_matrix.buffer, myTarget);
         ++num_epochs;
     }
 
     // FORWARD
-    // float forward_error = myNetwork.forward(features_matrix.buffer, myTarget);
+    float forward_error = myNetwork.forward(features_matrix.buffer, myTarget);
 
-    // float error = forward_error;
-    // if (!only_forward) {
-    //     error = backward_error;
-    // }
+    float error = forward_error;
+    if (!only_forward) {
+        error = backward_error;
+    }
 
-    // float* myOutput = myNetwork.get_output();
+    float* myOutput = myNetwork.get_output();
 
     //uint8_t num_button_output = 0;
     //float max_output = 0.f;
@@ -179,28 +175,28 @@ void train(int nb, bool only_forward) {
 
 
     // Info to plot & graph!
-    Serial.println("Done!");
+    Serial.println("graph");
 
     // Print outputs
-    // for (size_t i = 0; i < 3; i++) {
-    //     ei_printf_float(myOutput[i]);
-    //     Serial.print(" ");
+    for (size_t i = 0; i < 3; i++) {
+        ei_printf_float(myOutput[i]);
+        Serial.print(" ");
     //    if (myOutput[i] > max_output && myOutput[i] > threshold) {
     //        num_button_output = i + 1;
     //    }
-    // }
-    // Serial.print("\n");
+    }
+    Serial.print("\n");
 
     // Print error
-    // ei_printf_float(error);
-    // Serial.print("\n");
+    ei_printf_float(error);
+    Serial.print("\n");
 
-    // Serial.println(num_epochs, DEC);
+    Serial.println(num_epochs, DEC);
 
-    // char* myError = (char*) &error;
-    // Serial.write(myError, sizeof(float));
+    char* myError = (char*) &error;
+    Serial.write(myError, sizeof(float));
     
-    // Serial.println(nb, DEC);
+    Serial.println(nb, DEC);
 }
 
 /**
@@ -310,10 +306,10 @@ void loop() {
                 }
 
                 // Sending output layer
-                // char* myOutputWeights = (char*) myNetwork.get_OutputWeights();
-                // for (uint16_t i = 0; i < (HiddenNodes+1) * OutputNodes; ++i) {
-                //     Serial.write(myOutputWeights+i*sizeof(float), sizeof(float));
-                // }
+                char* myOutputWeights = (char*) myNetwork.get_OutputWeights();
+                for (uint16_t i = 0; i < (HiddenNodes+1) * OutputNodes; ++i) {
+                    Serial.write(myOutputWeights+i*sizeof(float), sizeof(float));
+                }
 
                 /*****
                  * Receiving model
@@ -328,13 +324,13 @@ void loop() {
                 }
 
                 // Receiving output layer
-                // for (uint16_t i = 0; i < (HiddenNodes+1) * OutputNodes; ++i) {
-                //     Serial.write('n');
-                //     while(Serial.available() < 4) {}
-                //     for (int n = 0; n < 4; n++) {
-                //         myOutputWeights[i*4+n] = Serial.read();
-                //     }
-                // }
+                for (uint16_t i = 0; i < (HiddenNodes+1) * OutputNodes; ++i) {
+                    Serial.write('n');
+                    while(Serial.available() < 4) {}
+                    for (int n = 0; n < 4; n++) {
+                        myOutputWeights[i*4+n] = Serial.read();
+                    }
+                }
                 // Serial.println("Model aggregation done");
             }
 

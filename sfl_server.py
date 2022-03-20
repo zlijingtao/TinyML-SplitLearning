@@ -10,6 +10,8 @@ import time
 import json
 import os
 import random
+# import torch
+
 
 random.seed(4321)
 np.random.seed(4321)
@@ -18,11 +20,22 @@ samples_per_device = 120 # Amount of samples of each word to send to each device
 batch_size = 10 # Must be even, hsa to be split into 2 types of samples
 experiment = 'iid' # 'iid', 'no-iid', 'train-test'
 
+
+# initialize client-side model
 size_hidden_nodes = 25
+size_output_nodes = 3
 size_hidden_layer = (650+1)*size_hidden_nodes
-size_output_layer = (size_hidden_nodes+1)*3
 hidden_layer = np.random.uniform(-0.5,0.5, size_hidden_layer).astype('float32')
+
+
+# initialize server-side model #TODO step - 1 [we simply split current architecture] step - 2: after this is done, we extend architecture using pytorch.
+size_output_layer = (size_hidden_nodes+1)*size_output_nodes # why we need one more row
 output_layer = np.random.uniform(-0.5, 0.5, size_output_layer).astype('float32')
+output_weight_updates  = np.zeros_like(output_layer)
+#TODO: in split learning, we only send hidden_layer to our device, and receive [1, 25] activation back.
+#
+
+
 momentum = 0.9
 learningRate= 0.6
 pauseListen = False # So there are no threads reading the serial input at the same time
@@ -45,6 +58,52 @@ test_mountains = list(sum(zip(test_montserrat_files, test_pedraforca_files), ())
 # random.shuffle(vermell_files)
 # random.shuffle(verd_files)
 # random.shuffle(blau_files)
+
+
+def convert_string_to_array(string, one_hot = False):
+    pass #TODO: implement this
+    return string
+
+def server_compute(Hidden, target, only_forward = False):
+
+    #TODO: matrix multiplication optimization
+
+    # Compute forward and error
+    error = 0.0
+    output_array = np.zeros((size_output_nodes,))
+    output_delta_array = np.zeros((size_output_nodes,))
+    for i in range(size_output_nodes):
+        # Compute bias
+        accu = output_layer[size_hidden_nodes * size_output_nodes + i]
+        for j in range(size_hidden_nodes):
+            accu += Hidden[j] * output_layer[j*size_output_nodes + i] #[1, 25] * [25, 3]
+
+        output_array[i] = 1.0 / (1.0 + np.exp(-accu))
+        output_delta_array[i] = (target[i] - output_array[i]) * output_array[i] * (1.0 - output_array[i])
+        error += 1/size_output_nodes * (target[i] - output_array[i]) * (target[i] - output_array[i])
+
+    
+    if not only_forward:
+        # Compute backward and gradients w.r.t. to activaiton (error_array) to client
+        error_array = np.zeros((size_hidden_nodes,))
+        for i in range(size_hidden_nodes):
+            for j in range(size_output_nodes):
+                error_array[i] += output_layer[i*size_output_nodes + j] * output_delta_array[j] #[25, 3] * [3, 1]
+        
+        # Update weights
+        for i in range(size_output_nodes):
+            output_weight_updates[size_hidden_nodes * size_output_nodes + i] = learningRate * output_delta_array[i] + momentum * output_weight_updates[size_hidden_nodes * size_output_nodes + i] #bias update
+            output_layer[size_hidden_nodes * size_output_nodes + i] += output_weight_updates[size_hidden_nodes * size_output_nodes + i]
+            for j in range(size_hidden_nodes):
+                output_weight_updates[j*size_output_nodes + i] = learningRate * Hidden[j] * output_delta_array[i] + momentum * output_weight_updates[j*size_output_nodes + i]
+                output_layer[j*size_output_nodes + i] = output_weight_updates[j*size_output_nodes + i]
+
+    if not only_forward:
+        return error, error_array
+    else:
+        return error
+
+    
 
 def print_until_keyword(keyword, arduino):
     while True: 
@@ -75,14 +134,8 @@ def init_network(hidden_layer, output_layer, device, deviceIndex):
         float_num = hidden_layer[i]
         data = struct.pack('f', float_num)
         device.write(data)
-    
-    for i in range(len(output_layer)):
-        device.read() # wait until confirmation of float received
-        float_num = output_layer[i]
-        data = struct.pack('f', float_num)
-        device.write(data)
 
-    print(f"Model sent to {device.port}")
+    print(f"Client-side Model sent to {device.port}")
     modelReceivedConfirmation = device.readline().decode()
     print(f"Model received confirmation: ", modelReceivedConfirmation)
     
@@ -151,13 +204,37 @@ def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False
             device.write(struct.pack('h', value))
 
         print(f"[{device.port}] Sample received confirmation:", device.readline().decode())
+        
+        # Receive activation from client
+        outputs = device.readline().decode()
+        print(f"Outputs: ", outputs)
+
+        # Receive label from client
+        nb = device.readline()[:-2]
+
+        if only_forward:
+            # Perform server-side computation (forward)
+            hidden_activation = convert_string_to_array(outputs)
+            label = convert_string_to_array(nb, one_hot = True)
+            forward_error = server_compute(hidden_activation, label, only_forward= True)
+        else:
+            # Perform server-side computation (forward/backward)
+            hidden_activation = convert_string_to_array(outputs)
+            label = convert_string_to_array(nb, one_hot = True)
+            forward_error, error_array = server_compute(hidden_activation, label, only_forward= False)
+        
+            # Send Error Array to client to continue backward #TODO: implement this
+            pass
+            
+            error = 0.0
+            if (error > 0.28):
+                print(f"[{device.port}] Sample {samplePath} generated an error of {error}")
 
         # print(f"Fordward millis received: ", device.readline().decode())
         # print(f"Backward millis received: ", device.readline().decode())
-        device.readline().decode() # Accept 'graph' command
-        error = read_graph(device, deviceIndex)
-        if (error > 0.28):
-            print(f"[{device.port}] Sample {samplePath} generated an error of {error}")
+        device.readline().decode() # Accept 'Done' command
+        # error = read_graph(device, deviceIndex)
+
 
 def sendTestSamples(device, deviceIndex):
     global test_mountains
@@ -178,24 +255,27 @@ def sendTestSamples(device, deviceIndex):
         print(f"[{device.port}] Sending sample {filename} ({i}/{len(files)}): Button {num_button}")
         sendSample(device, 'datasets/mountains/'+filename, num_button, deviceIndex, True)
 
-def read_graph(device, deviceIndex):
-    global repaint_graph
 
-    outputs = device.readline().decode()
-    print(f"Outputs: ", outputs)
 
-    error = device.readline().decode()
-    print(f"Error: ", error)
 
-    ne = device.readline()[:-2]
-    n_epooch = int(ne)
+# def read_graph(device, deviceIndex):
+#     global repaint_graph
 
-    n_error = device.read(4)
-    [n_error] = struct.unpack('f', n_error)
-    nb = device.readline()[:-2]
-    graph.append([n_epooch, n_error, deviceIndex])
-    repaint_graph = True
-    return n_error
+#     outputs = device.readline().decode()
+#     print(f"Outputs: ", outputs)
+
+#     error = device.readline().decode()
+#     print(f"Error: ", error)
+
+#     ne = device.readline()[:-2]
+#     n_epooch = int(ne)
+
+#     n_error = device.read(4)
+#     [n_error] = struct.unpack('f', n_error)
+#     nb = device.readline()[:-2]
+#     graph.append([n_epooch, n_error, deviceIndex])
+#     repaint_graph = True
+#     return n_error
 
 def read_number(msg):
     while True:
@@ -253,10 +333,11 @@ def listenDevice(device, deviceIndex):
         if (len(msg) > 0):
             print(f'({device.port}):', msg, end="")
             # Modified to graph
-            if msg[:-2] == 'graph':
-                read_graph(device, deviceIndex)
+            # if msg[:-2] == 'graph':
+            #     read_graph(device, deviceIndex)
 
-            elif msg[:-2] == 'start_fl':
+            # el
+            if msg[:-2] == 'start_fl':
                 startFL()
 
 def getDevices():
@@ -299,10 +380,10 @@ def FlGetModel(d, device_index, devices_hidden_layer, devices_output_layer, devi
             [float_num] = struct.unpack('f', data)
             devices_hidden_layer[device_index][i] = float_num
 
-        for i in range(size_output_layer): # output layer
-            data = d.read(4)
-            [float_num] = struct.unpack('f', data)
-            devices_output_layer[device_index][i] = float_num
+        # for i in range(size_output_layer): # output layer
+        #     data = d.read(4)
+        #     [float_num] = struct.unpack('f', data)
+        #     devices_output_layer[device_index][i] = float_num
 
         print(f'Model received from {d.port} ({time.time()-ini_time} seconds)')
 
@@ -322,11 +403,11 @@ def sendModel(d, hidden_layer, output_layer):
         data = struct.pack('f', float_num)
         d.write(data)
 
-    for i in range(size_output_layer): # output layer
-        d.read() # wait until confirmatio
-        float_num = output_layer[i]
-        data = struct.pack('f', float_num)
-        d.write(data)
+    # for i in range(size_output_layer): # output layer
+    #     d.read() # wait until confirmatio
+    #     float_num = output_layer[i]
+    #     data = struct.pack('f', float_num)
+    #     d.write(data)
 
     # sendmodel_confirmation = d.readline().decoder()
     # print(f'Model sent confirmation: {sendmodel_confirmation}')
