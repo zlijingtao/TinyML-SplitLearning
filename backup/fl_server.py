@@ -5,6 +5,7 @@ import struct
 import time
 import numpy as np
 import matplotlib.pyplot as plt
+import threading
 import time
 import json
 import os
@@ -370,19 +371,28 @@ def startFL():
     pauseListen = False
 
 def set_button(device, button):
-    # modelReceivedConfirmation = device.readline().decode()
-    # print(f"Model received confirmation: ", modelReceivedConfirmation)
-    device.reset_input_buffer()
-    device.write(b's')
-    print_until_keyword('bt_loaded', device)
+    device.write(b'b')
+    print_until_keyword('bt_set', device)
+    device.write(button)
     print(f"press/hold botton {button} on {device.port}")
 
-    device.write(struct.pack('f', learningRate))
-    device.read()
+# getDevices()
 
-    print("button pressed!")
+global devices, devices_connected
+num_devices = 1
 
-getDevices()
+available_ports = comports()
+print("Available ports:")
+for available_port in available_ports:
+    print(available_port)
+
+try:
+    print("Access default port")
+    devices = [serial.Serial('/dev/ttyACM0', 9600)]
+except:
+    print("Access alternative port")
+    devices = [serial.Serial('/dev/ttyACM1', 9600)]
+devices_connected = devices
 
 # To load a Pre-trained model
 # hidden_layer = np.load("./hidden_montserrat.npy")
@@ -390,39 +400,49 @@ getDevices()
 
 
 # Send the blank model to all the devices
+threads = []
 print("Number of devices is {}".format(str(devices)))
 for i, d in enumerate(devices):
-    init_network(hidden_layer, output_layer, d, i)
+    thread = threading.Thread(target=init_network, args=(hidden_layer, output_layer, d, i))
+    thread.daemon = True
+    thread.start()
+    threads.append(thread)
+for thread in threads: thread.join() # Wait for all the threads to end
 
 ini_time = time.time()
 
-# Set a initial button
-    
-for device in devices:
-    set_button(device, 5)
-    
 
 # Train the device
 for batch in range(int(samples_per_device/batch_size)):
     for deviceIndex, device in enumerate(devices):
         if experiment == 'iid' or experiment == 'train-test':
-            sendSamplesIID(device, deviceIndex, batch_size, batch)
+            thread = threading.Thread(target=sendSamplesIID, args=(device, deviceIndex, batch_size, batch))
         elif experiment == 'no-iid':
-            sendSamplesNonIID(device, deviceIndex, batch_size, batch)
-
+            thread = threading.Thread(target=sendSamplesNonIID, args=(device, deviceIndex, batch_size, batch))
+            
+        thread.daemon = True
+        thread.start()
+        threads.append(thread)
+    for thread in threads: thread.join() # Wait for all the threads to end
     startFL()
+
 
 train_time = time.time()-ini_time
 # print(f'Trained in ({train_time} seconds)')
 
 if experiment == 'train-test':
     for deviceIndex, device in enumerate(devices):
-        sendTestSamples(device, deviceIndex)
-
+        thread = threading.Thread(target=sendTestSamples, args=(device, deviceIndex))
+        thread.daemon = True
+        thread.start()
+        threads.append(thread)
+    for thread in threads: thread.join() # Wait for all the threads to end
 
 # Listen their updates
 for i, d in enumerate(devices):
-    listenDevice(d, i)
+    thread = threading.Thread(target=listenDevice, args=(d, i))
+    thread.daemon = True
+    thread.start()
 
 plt.ion()
 # plt.title(f"Loss vs Epoch")
