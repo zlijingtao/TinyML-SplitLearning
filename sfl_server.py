@@ -10,7 +10,8 @@ import time
 import json
 import os
 import random
-# import torch
+import torch
+import torch.nn as nn
 
 
 random.seed(4321)
@@ -28,16 +29,67 @@ size_hidden_layer = (650+1)*size_hidden_nodes
 hidden_layer = np.random.uniform(-0.5,0.5, size_hidden_layer).astype('float32')
 
 
-# initialize server-side model #TODO step - 1 [we simply split current architecture] step - 2: after this is done, we extend architecture using pytorch.
+# # We add an extra layer at the server-side model
+# neuron_layer_2nd = 2 * size_hidden_nodes
+
+# size_layer_2nd = (size_hidden_nodes+1)*neuron_layer_2nd
+# layer_2nd = np.random.uniform(-0.5, 0.5, size_layer_2nd).astype('float32')
+# layer_2nd_weight_updates = np.zeros_like(layer_2nd)
+
+#TODO: we will use pytorch on server-side model to automate the training.
+
+# initialize server-side model #TODO: step - 1 [we simply split current architecture] step - 2: after this is done, we extend architecture using pytorch.
 size_output_layer = (size_hidden_nodes+1)*size_output_nodes # why we need one more row
 output_layer = np.random.uniform(-0.5, 0.5, size_output_layer).astype('float32')
 output_weight_updates  = np.zeros_like(output_layer)
-#TODO: in split learning, we only send hidden_layer to our device, and receive [1, 25] activation back.
-#
-
 
 momentum = 0.9
-learningRate= 0.6
+learningRate= 0.3
+number_hidden = 0
+hidden_size = 128
+
+
+def init_weights(m):
+    if type(m) == nn.Linear:
+        torch.nn.init.uniform_(m.weight, a = -0.5, b = 0.5)
+        torch.nn.init.uniform_(m.bias, a = -0.5, b = 0.5)
+    if type(m) == nn.Conv2d:
+        torch.nn.init.uniform_(m.weight, a = -0.5, b = 0.5)
+        torch.nn.init.uniform_(m.bias, a = -0.5, b = 0.5)
+
+class server_model(nn.Module):
+    '''
+    VGG model 
+    '''
+    def __init__(self, num_class = 3, number_hidden = 1, hidden_size = 128, input_size = 25):
+        super(server_model, self).__init__()
+
+        last_layer_input_size = input_size
+        model_list = []
+
+        for _ in range(number_hidden):
+            model_list.append(nn.Linear(input_size, hidden_size, bias = True))
+            model_list.append(nn.ReLU())
+            last_layer_input_size = hidden_size
+        
+        model_list.append(nn.Linear(last_layer_input_size, num_class, bias = True))
+        model_list.append(nn.Sigmoid())
+
+        self.server = nn.Sequential(*model_list)
+
+        print("server:")
+        print(self.server)
+    def forward(self, x):
+        out = self.server(x)
+        return out
+
+
+s_model = server_model(num_class = size_output_nodes, number_hidden = number_hidden, hidden_size = hidden_size, input_size = size_hidden_nodes)
+s_model.apply(init_weights)
+s_optimizer = torch.optim.SGD(list(s_model.parameters()), lr=learningRate, momentum=momentum, weight_decay=5e-4)
+# s_optimizer = torch.optim.Adam(list(s_model.parameters()), lr=learningRate)
+
+
 pauseListen = False # So there are no threads reading the serial input at the same time
 
 montserrat_files = [file for file in os.listdir("datasets/mountains") if file.startswith("montserrat")]
@@ -71,7 +123,55 @@ def convert_string_to_array(string, one_hot = False):
         out_label[int(string.replace('b', '').replace('\'', '')) - 1] = 1 
         return out_label
 
+
 def server_compute(Hidden, target, only_forward = False):
+
+    # input = torch.from_numpy(Hidden).cuda()
+    input = torch.tensor(Hidden, requires_grad=True).float().cuda()
+    
+    label = torch.from_numpy(target).float().cuda()
+
+    s_model.cuda()
+
+    s_model.train()
+    
+    s_optimizer.zero_grad()
+
+    input.retain_grad()
+
+    output = s_model(input)
+    
+    # criterion = nn.CrossEntropyLoss()
+    criterion = nn.MSELoss()
+
+    # sigmoid_act = nn.Sigmoid()
+
+    # output = sigmoid_act(output)
+
+    # loss = 1/size_output_nodes * torch.sum((label - output) * (label - output))
+    loss = criterion(output, label)
+
+    error = loss.detach().cpu().numpy()
+    
+    if not only_forward:
+
+        loss.backward(retain_graph = True)
+
+        # get gradient
+        error_array = input.grad.detach().cpu().numpy()
+        
+        s_optimizer.step()
+
+        
+    if not only_forward:
+        print(error_array)
+        return error, error_array
+    else:
+        return error
+
+
+
+def server_compute_old(Hidden, target, only_forward = False):
 
     #TODO: matrix multiplication optimization
 

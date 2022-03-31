@@ -25,11 +25,21 @@ void NeuralNetwork::forward(const float Input[]){
     /******************************************************************
     * Compute hidden layer activations and calculate activations
     ******************************************************************/
+
+    
     for (int i = 0; i < HiddenNodes; i++) {
         float Accum = HiddenWeights[InputNodes*HiddenNodes + i];
         for (int j = 0; j < InputNodes; j++) {
             Accum += Input[j] * HiddenWeights[j*HiddenNodes + i];
         }
+        // Changed the activation to RELU
+        // if (Accum >= 0){
+        //     Hidden[i] = Accum;
+        // }
+        // else {
+        //     Hidden[i] = 0.0;
+        // }
+        // Original sigmoid activation
         Hidden[i] = 1.0 / (1.0 + exp(-Accum));
     }
 }
@@ -39,7 +49,15 @@ void NeuralNetwork::backward(const float Input[]){
     /******************************************************************
     * Backpropagate errors to hidden layer
     ******************************************************************/
-    for(int i = 0 ; i < HiddenNodes ; i++ ) {    
+    for(int i = 0 ; i < HiddenNodes ; i++ ) {
+        // Changed the dW calculation to RELU (backward)   
+        // if (Error[i] < 0){
+        //     HiddenDelta[i] = 0.0;
+        // }
+        // else{
+        //     HiddenDelta[i] = Error[i] * Hidden[i];
+        // }
+        // Original sigmoid activation (backward)
         HiddenDelta[i] = Error[i] * Hidden[i] * (1.0 - Hidden[i]) ;
     }
 
