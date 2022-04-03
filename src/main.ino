@@ -89,6 +89,7 @@ void init_network_model() {
     Serial.write('n');
 
     myNetwork.initialize(learningRate, momentum);
+    myNetwork.initWeights();
 
     char* myHiddenWeights = (char*) myNetwork.get_HiddenWeights();
     for (uint16_t i = 0; i < (InputNodes+1) * HiddenNodes; ++i) {
@@ -315,6 +316,7 @@ void loop() {
                  *******/
 
                 // Sending hidden layer
+                // char* myHiddenWeights = (char*) myNetwork.get_HiddenWeights();
                 char* myHiddenWeights = (char*) myNetwork.get_HiddenWeights();
                 for (uint16_t i = 0; i < (InputNodes+1) * HiddenNodes; ++i) {
                     Serial.write(myHiddenWeights+i*sizeof(float), sizeof(float));

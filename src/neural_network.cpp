@@ -30,7 +30,8 @@ void NeuralNetwork::forward(const float Input[]){
     for (int i = 0; i < HiddenNodes; i++) {
         float Accum = HiddenWeights[InputNodes*HiddenNodes + i];
         for (int j = 0; j < InputNodes; j++) {
-            Accum += Input[j] * HiddenWeights[j*HiddenNodes + i];
+            // Accum += Input[j] * HiddenWeights[j*HiddenNodes + i]; //Original
+            Accum += Input[j]/100. * HiddenWeights[j*HiddenNodes + i]; // Input scale down by 100
         }
         // Changed the activation to RELU
         // if (Accum >= 0){
@@ -40,7 +41,10 @@ void NeuralNetwork::forward(const float Input[]){
         //     Hidden[i] = 0.0;
         // }
         // Original sigmoid activation
-        Hidden[i] = 1.0 / (1.0 + exp(-Accum));
+        // Hidden[i] = 1.0 / (1.0 + exp(-Accum));
+
+        // Changed the activation to identity
+        Hidden[i] = Accum;
     }
 }
 
@@ -58,7 +62,10 @@ void NeuralNetwork::backward(const float Input[]){
         //     HiddenDelta[i] = Error[i] * Hidden[i];
         // }
         // Original sigmoid activation (backward)
-        HiddenDelta[i] = Error[i] * Hidden[i] * (1.0 - Hidden[i]) ;
+        // HiddenDelta[i] = Error[i] * Hidden[i] * (1.0 - Hidden[i]) ;
+
+        // Changed the dW calculation to Identity (backward)   
+        HiddenDelta[i] = Error[i] * Hidden[i];
     }
 
     /******************************************************************
@@ -68,7 +75,8 @@ void NeuralNetwork::backward(const float Input[]){
         ChangeHiddenWeights[InputNodes*HiddenNodes + i] = LearningRate * HiddenDelta[i] + Momentum * ChangeHiddenWeights[InputNodes*HiddenNodes + i] ;
         HiddenWeights[InputNodes*HiddenNodes + i] += ChangeHiddenWeights[InputNodes*HiddenNodes + i] ;
         for(int j = 0 ; j < InputNodes ; j++ ) { 
-            ChangeHiddenWeights[j*HiddenNodes + i] = LearningRate * Input[j] * HiddenDelta[i] + Momentum * ChangeHiddenWeights[j*HiddenNodes + i];
+            // ChangeHiddenWeights[j*HiddenNodes + i] = LearningRate * Input[j] * HiddenDelta[i] + Momentum * ChangeHiddenWeights[j*HiddenNodes + i];   // Original
+            ChangeHiddenWeights[j*HiddenNodes + i] = LearningRate * Input[j]/100. * HiddenDelta[i] + Momentum * ChangeHiddenWeights[j*HiddenNodes + i];  // Input scale down by 100
             HiddenWeights[j*HiddenNodes + i] += ChangeHiddenWeights[j*HiddenNodes + i] ;
         }
     }

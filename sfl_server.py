@@ -12,12 +12,17 @@ import os
 import random
 import torch
 import torch.nn as nn
-
+#TODO: add server validation
+#TODO: compare baseline validation and more layers (or larger model)
+#TODO: try to extinct resources on board. (multi-iamge batch?)
+#TODO: find a way to store some image and pull out them to train.
+#TODO: Use our own image. 
+#TODO: How to make it really useful? Just as the original one, need some button to do the labeling.
 
 random.seed(4321)
 np.random.seed(4321)
 
-samples_per_device = 120 # Amount of samples of each word to send to each device
+samples_per_device = 360 # Amount of samples of each word to send to each device
 batch_size = 10 # Must be even, hsa to be split into 2 types of samples
 experiment = 'iid' # 'iid', 'no-iid', 'train-test'
 
@@ -44,7 +49,7 @@ output_layer = np.random.uniform(-0.5, 0.5, size_output_layer).astype('float32')
 output_weight_updates  = np.zeros_like(output_layer)
 
 momentum = 0.9
-learningRate= 0.3
+learningRate= 0.02
 number_hidden = 0
 hidden_size = 128
 
@@ -68,12 +73,12 @@ class server_model(nn.Module):
         model_list = []
 
         for _ in range(number_hidden):
-            model_list.append(nn.Linear(input_size, hidden_size, bias = True))
+            model_list.append(nn.Linear(last_layer_input_size, hidden_size, bias = True))
             model_list.append(nn.ReLU())
             last_layer_input_size = hidden_size
         
         model_list.append(nn.Linear(last_layer_input_size, num_class, bias = True))
-        model_list.append(nn.Sigmoid())
+        # model_list.append(nn.Sigmoid())
 
         self.server = nn.Sequential(*model_list)
 
@@ -129,7 +134,8 @@ def server_compute(Hidden, target, only_forward = False):
     # input = torch.from_numpy(Hidden).cuda()
     input = torch.tensor(Hidden, requires_grad=True).float().cuda()
     
-    label = torch.from_numpy(target).float().cuda()
+    # label = torch.from_numpy(target).float().cuda()
+    label = torch.argmax(torch.from_numpy(target).float()).cuda()
 
     s_model.cuda()
 
@@ -141,15 +147,11 @@ def server_compute(Hidden, target, only_forward = False):
 
     output = s_model(input)
     
-    # criterion = nn.CrossEntropyLoss()
-    criterion = nn.MSELoss()
+    criterion = nn.CrossEntropyLoss()
+    # criterion = nn.MSELoss()
 
-    # sigmoid_act = nn.Sigmoid()
-
-    # output = sigmoid_act(output)
-
-    # loss = 1/size_output_nodes * torch.sum((label - output) * (label - output))
     loss = criterion(output, label)
+    # loss = criterion(output, label) * 1 / size_output_nodes
 
     error = loss.detach().cpu().numpy()
     
@@ -164,7 +166,7 @@ def server_compute(Hidden, target, only_forward = False):
 
         
     if not only_forward:
-        print(error_array)
+        print(output.detach().cpu().numpy())
         return error, error_array
     else:
         return error
@@ -315,9 +317,6 @@ def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False
         # Receive activation from client
         outputs = device.readline().decode()
 
-        
-
-
         if only_forward:
             # Perform server-side computation (forward)
             hidden_activation = convert_string_to_array(outputs)
@@ -432,9 +431,9 @@ def plot_graph():
 
         plt.legend()
         plt.xlim(left=0)
-        plt.ylim(bottom=0, top=0.7)
+        plt.ylim(bottom=0, top=2.0)
         plt.ylabel('Loss') # or Error
-        plt.xlabel('Epoch')
+        plt.xlabel('Image')
         # plt.axes().set_ylim([0, 0.6])
         # plt.xlim(bottom=0)
         # plt.autoscale()
