@@ -89,17 +89,16 @@ void init_network_model() {
     Serial.write('n');
 
     myNetwork.initialize(learningRate, momentum);
-    myNetwork.initWeights();
+    // myNetwork.initWeights();
 
     char* myHiddenWeights = (char*) myNetwork.get_HiddenWeights();
     for (uint16_t i = 0; i < (InputNodes+1) * HiddenNodes; ++i) {
         Serial.write('n');
         while(Serial.available() < 4) {}
         for (int n = 0; n < 4; n++) {
-            myHiddenWeights[i*4] = Serial.read();
+            myHiddenWeights[i*4+n] = Serial.read();
         }
     }
-
     Serial.println("Received new client-side model.");
 }
 
@@ -144,6 +143,15 @@ void train(int nb, bool only_forward) {
 
     myNetwork.forward(features_matrix.buffer);
 
+    // Sending inputs to Server 
+    // float* myinput = features_matrix.buffer;
+    // for (size_t i = 0; i < 50; i++) {
+    //     for (size_t j = 0; j < 13; j++) {
+    //         ei_printf_float(myinput[i*13 + j]);
+    //         Serial.print(" ");
+    //     }
+    //     Serial.print("\r\n");
+    // }
     // Sending activation/label to Server 
     float* myOutput = myNetwork.get_output();
     for (size_t i = 0; i < 25; i++) {

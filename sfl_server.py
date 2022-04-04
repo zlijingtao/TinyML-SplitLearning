@@ -12,7 +12,6 @@ import os
 import random
 import torch
 import torch.nn as nn
-#TODO: add server validation
 #TODO: compare baseline validation and more layers (or larger model)
 #TODO: try to extinct resources on board. (multi-iamge batch?)
 #TODO: find a way to store some image and pull out them to train.
@@ -22,8 +21,9 @@ import torch.nn as nn
 random.seed(4321)
 np.random.seed(4321)
 
-samples_per_device = 360 # Amount of samples of each word to send to each device
+samples_per_device = 300 # Amount of samples of each word to send to each device
 batch_size = 10 # Must be even, hsa to be split into 2 types of samples
+# experiment = 'iid' # 'iid', 'no-iid', 'train-test'
 experiment = 'iid' # 'iid', 'no-iid', 'train-test'
 
 
@@ -51,7 +51,7 @@ output_weight_updates  = np.zeros_like(output_layer)
 momentum = 0.9
 learningRate= 0.02
 number_hidden = 0
-hidden_size = 128
+hidden_size = 64
 
 
 def init_weights(m):
@@ -61,6 +61,25 @@ def init_weights(m):
     if type(m) == nn.Conv2d:
         torch.nn.init.uniform_(m.weight, a = -0.5, b = 0.5)
         torch.nn.init.uniform_(m.bias, a = -0.5, b = 0.5)
+
+class client_model(nn.Module):
+    '''
+    VGG model 
+    '''
+    def __init__(self):
+        super(client_model, self).__init__()
+
+        model_list = []
+        
+        model_list.append(nn.Linear(650, size_hidden_nodes, bias = True))
+        # model_list.append(nn.ReLU())
+
+        self.client = nn.Sequential(*model_list)
+
+    def forward(self, x):
+        out = self.client(x)
+        return out
+
 
 class server_model(nn.Module):
     '''
@@ -91,6 +110,9 @@ class server_model(nn.Module):
 
 s_model = server_model(num_class = size_output_nodes, number_hidden = number_hidden, hidden_size = hidden_size, input_size = size_hidden_nodes)
 s_model.apply(init_weights)
+c_model = client_model()
+# print(c_model.state_dict())
+c_model.load_state_dict({'client.0.weight': torch.tensor(hidden_layer[:size_hidden_nodes*650]).view(650, size_hidden_nodes).t().float(), 'client.0.bias': torch.tensor(hidden_layer[size_hidden_nodes*650:]).float()})
 s_optimizer = torch.optim.SGD(list(s_model.parameters()), lr=learningRate, momentum=momentum, weight_decay=5e-4)
 # s_optimizer = torch.optim.Adam(list(s_model.parameters()), lr=learningRate)
 
@@ -107,6 +129,8 @@ test_pedraforca_files = [file for file in os.listdir("datasets/test") if file.st
 
 graph = []
 repaint_graph = True
+
+val_graph = []
 
 random.shuffle(montserrat_files)
 random.shuffle(pedraforca_files)
@@ -172,6 +196,35 @@ def server_compute(Hidden, target, only_forward = False):
         return error
 
 
+def server_validate(test_in, test_out):
+    # multiple_batch
+    input = torch.tensor(test_in, requires_grad=True).float().cuda()
+    
+    label = torch.from_numpy(test_out).view(input.size(0), ).long().cuda()
+
+    c_model.cuda()
+
+    s_model.cuda()
+
+    s_model.eval()
+
+    c_model.eval()
+
+    output = s_model(c_model(input))
+    
+    criterion = nn.CrossEntropyLoss()
+    # criterion = nn.MSELoss()
+
+    loss = criterion(output, label)
+    # loss = criterion(output, label) * 1 / size_output_nodes
+
+    error = loss.detach().cpu().numpy()
+
+    accu = (torch.argmax(output, dim = 1) == label).sum() / input.size(0)
+
+    accu = accu.detach().cpu().numpy()
+
+    return error, accu
 
 def server_compute_old(Hidden, target, only_forward = False):
 
@@ -270,6 +323,42 @@ def sendSamplesIID(device, deviceIndex, batch_size, batch_index):
         print(f"[{device.port}] Sending sample {filename} ({i}/{len(files)}): Button {num_button}")
         sendSample(device, 'datasets/mountains/'+filename, num_button, deviceIndex)
 
+def getSamplesIID(batch_size, batch_start_index):
+    global montserrat_files, pedraforca_files, mountains
+
+    # each_sample_amt = int(batch_size/2)
+
+    start = batch_start_index
+    end = batch_start_index + batch_size
+
+    input_list = []
+    label_list = []
+
+    files = mountains[start:end]
+    for i, filename in enumerate(files):
+        if (filename.startswith("montserrat")):
+            num_button = 1
+        elif (filename.startswith("pedraforca")):
+            num_button = 2
+        else:
+            exit("Unknown button for sample")
+        
+        if num_button == 1:
+            input_array = np.load("processed_datasets/mountains/montserrat_{}.npy".format(filename.split("/")[-1].split(".")[1]))
+        elif num_button == 2:
+            input_array = np.load("processed_datasets/mountains/pedraforca_{}.npy".format(filename.split("/")[-1].split(".")[1]))
+        else:
+            exit("Unknown button for sample")
+    
+        input_list.append(input_array)
+        label_list.append(num_button - 1) # need to minus oen to act as label.
+
+        input_list_array = np.concatenate(input_list, axis = 0)
+        label_list_array = np.array(label_list).reshape(-1, 1)
+    return input_list_array, label_list_array
+                
+
+
 def sendSamplesNonIID(device, deviceIndex, batch_size, batch_index):
     global montserrat_files, pedraforca_files, vermell_files, verd_files, blau_files
 
@@ -314,6 +403,25 @@ def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False
 
         print(f"[{device.port}] Sample received confirmation:", device.readline().decode())
         
+
+        #Receive input from client
+        # input_list = []
+        # for _ in range(50):
+        #     inputs = device.readline().decode()
+        #     inputs_converted = convert_string_to_array(inputs)
+        #     input_list.append(inputs_converted)
+        # input_array = np.concatenate(input_list, axis = 0).reshape(1,650)
+        # print(f"test_input: ", input_array)
+
+        # if num_button == 1:
+        #     np.save("processed_datasets/mountains/montserrat_{}".format(samplePath.split("/")[-1].split(".")[1]), input_array)
+        # elif num_button == 2:
+        #     np.save("processed_datasets/mountains/pedraforca_{}".format(samplePath.split("/")[-1].split(".")[1]), input_array)
+
+        # test_output = c_model(torch.tensor(input_array/100.).float())
+        # print(f"test_Outputs: ", test_output)
+
+
         # Receive activation from client
         outputs = device.readline().decode()
 
@@ -441,7 +549,22 @@ def plot_graph():
 
     plt.pause(2)
 
+def plot_val_graph():
+    global val_graph, repaint_graph
+
+    colors = ['r', 'g', 'b', 'y']
+    markers = ['-', '--', ':', '-.']
+    error = [x[0] for x in val_graph]
+    accuracy = [x[1] for x in val_graph]
     
+    plt.plot(accuracy, colors[1] + markers[0], label="Global")
+    plt.legend()
+    plt.xlim(left=0)
+    plt.ylim(bottom=0, top=1.0)
+    plt.ylabel('Accuracy') # or Error
+    plt.xlabel('Epoch')
+
+    plt.pause(2)
 
 def listenDevice(device, deviceIndex):
     global pauseListen, graph
@@ -573,6 +696,18 @@ def startFL():
         output_layer = np.average(devices_output_layer, axis=0, weights=devices_num_epochs)
         print(f'Average millis: {(time.time()*1000)-ini_time} milliseconds)')
 
+    # Doing validation
+    c_model.load_state_dict({'client.0.weight': torch.tensor(hidden_layer[:size_hidden_nodes*650]).view(650, size_hidden_nodes).t().float(), 'client.0.bias': torch.tensor(hidden_layer[size_hidden_nodes*650:]).float()})
+    
+    # get test data #TODO: figure how to do mfcc
+    test_in, test_out = getSamplesIID(60, 300)
+
+    error, accu = server_validate(test_in, test_out)
+    print("======Testing Start======")
+    print(f"==Error {error}==")
+    print(f"==Accuracy {accu}==")
+    val_graph.append([error, accu, 0])
+    print("======Testing End======")
 
     #################
     # Sending models
@@ -605,6 +740,7 @@ available_ports = comports()
 print("Available ports:")
 for available_port in available_ports:
     print(available_port)
+
 
 try:
     print("Access default port")
@@ -676,7 +812,7 @@ for i, d in enumerate(devices):
     thread.daemon = True
     thread.start()
 
-
+plt.figure(1)
 plt.ion()
 # plt.title(f"Loss vs Epoch")
 plt.show()
@@ -693,11 +829,21 @@ plt.rc('legend', fontsize=font_sm)    # legend fontsize
 plt.rc('figure', titlesize=font_xl)   # fontsize of the figure title
 
 plot_graph()
-figname = f"newplots/BS{batch_size}-LR{learningRate}-M{momentum}-HL{size_hidden_nodes}-TT{train_time}-{experiment}.eps"
+figname = f"newplots/BS{batch_size}-LR{learningRate}-M{momentum}-HL{size_hidden_nodes}-TT{train_time}-{experiment}_train.eps"
 plt.savefig(figname, format='eps')
 print(f"Generated {figname}")
-while True:
-    #if (repaint_graph): 
-    plot_graph()
-        #repaint_graph = False
-    # time.sleep(0.1)
+
+plt.figure(2)
+plt.ion()
+plt.show()
+plt.rc('font', size=font_sm)          # controls default text sizes
+plt.rc('axes', titlesize=font_sm)     # fontsize of the axes title
+plt.rc('axes', labelsize=font_md)     # fontsize of the x and y labels
+plt.rc('xtick', labelsize=font_sm)    # fontsize of the tick labels
+plt.rc('ytick', labelsize=font_sm)    # fontsize of the tick labels
+plt.rc('legend', fontsize=font_sm)    # legend fontsize
+plt.rc('figure', titlesize=font_xl)   # fontsize of the figure title
+plot_val_graph()
+figname2 = f"newplots/BS{batch_size}-LR{learningRate}-M{momentum}-HL{size_hidden_nodes}-TT{train_time}-{experiment}_val.eps"
+plt.savefig(figname2, format='eps')
+print(f"Generated {figname2}")
