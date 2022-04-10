@@ -50,8 +50,8 @@ output_weight_updates  = np.zeros_like(output_layer)
 
 momentum = 0.9
 learningRate= 0.02
-number_hidden = 0
-hidden_size = 64
+number_hidden = 1
+hidden_size = 128
 
 
 def init_weights(m):
@@ -218,9 +218,12 @@ def server_validate(test_in, test_out):
     loss = criterion(output, label)
     # loss = criterion(output, label) * 1 / size_output_nodes
 
-    error = loss.detach().cpu().numpy()
+    error = loss.detach().cpu().numpy() / input.size(0)
 
     accu = (torch.argmax(output, dim = 1) == label).sum() / input.size(0)
+
+    print(torch.argmax(output, dim = 1))
+    print(label)
 
     accu = accu.detach().cpu().numpy()
 
@@ -557,7 +560,8 @@ def plot_val_graph():
     error = [x[0] for x in val_graph]
     accuracy = [x[1] for x in val_graph]
     
-    plt.plot(accuracy, colors[1] + markers[0], label="Global")
+    plt.plot(accuracy, colors[1] + markers[0], label="accuracy")
+    plt.plot(error, colors[2] + markers[0], label="error")
     plt.legend()
     plt.xlim(left=0)
     plt.ylim(bottom=0, top=1.0)
@@ -781,18 +785,20 @@ ini_time = time.time()
 
 
 # Train the device
-for batch in range(int(samples_per_device/batch_size)):
-    for deviceIndex, device in enumerate(devices):
-        if experiment == 'iid' or experiment == 'train-test':
-            thread = threading.Thread(target=sendSamplesIID, args=(device, deviceIndex, batch_size, batch))
-        elif experiment == 'no-iid':
-            thread = threading.Thread(target=sendSamplesNonIID, args=(device, deviceIndex, batch_size, batch))
-            
-        thread.daemon = True
-        thread.start()
-        threads.append(thread)
-    for thread in threads: thread.join() # Wait for all the threads to end
-    startFL()
+epoch_size = 3 # default = 1
+for _ in range(epoch_size):
+    for batch in range(int(samples_per_device/batch_size)):
+        for deviceIndex, device in enumerate(devices):
+            if experiment == 'iid' or experiment == 'train-test':
+                thread = threading.Thread(target=sendSamplesIID, args=(device, deviceIndex, batch_size, batch))
+            elif experiment == 'no-iid':
+                thread = threading.Thread(target=sendSamplesNonIID, args=(device, deviceIndex, batch_size, batch))
+                
+            thread.daemon = True
+            thread.start()
+            threads.append(thread)
+        for thread in threads: thread.join() # Wait for all the threads to end
+        startFL()
 
 train_time = time.time()-ini_time
 # print(f'Trained in ({train_time} seconds)')
@@ -829,7 +835,7 @@ plt.rc('legend', fontsize=font_sm)    # legend fontsize
 plt.rc('figure', titlesize=font_xl)   # fontsize of the figure title
 
 plot_graph()
-figname = f"newplots/BS{batch_size}-LR{learningRate}-M{momentum}-HL{size_hidden_nodes}-TT{train_time}-{experiment}_train.eps"
+figname = f"newplots/ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-TT{train_time}-{experiment}_train.eps"
 plt.savefig(figname, format='eps')
 print(f"Generated {figname}")
 
@@ -844,6 +850,6 @@ plt.rc('ytick', labelsize=font_sm)    # fontsize of the tick labels
 plt.rc('legend', fontsize=font_sm)    # legend fontsize
 plt.rc('figure', titlesize=font_xl)   # fontsize of the figure title
 plot_val_graph()
-figname2 = f"newplots/BS{batch_size}-LR{learningRate}-M{momentum}-HL{size_hidden_nodes}-TT{train_time}-{experiment}_val.eps"
+figname2 = f"newplots/ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-TT{train_time}-{experiment}_val.eps"
 plt.savefig(figname2, format='eps')
 print(f"Generated {figname2}")
