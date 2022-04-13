@@ -49,7 +49,7 @@ output_layer = np.random.uniform(-0.5, 0.5, size_output_layer).astype('float32')
 output_weight_updates  = np.zeros_like(output_layer)
 
 momentum = 0.9
-learningRate= 0.02
+learningRate= 0.01
 number_hidden = 1
 hidden_size = 128
 
@@ -785,7 +785,7 @@ ini_time = time.time()
 
 
 # Train the device
-epoch_size = 3 # default = 1
+epoch_size = 1 # default = 1
 for _ in range(epoch_size):
     for batch in range(int(samples_per_device/batch_size)):
         for deviceIndex, device in enumerate(devices):
