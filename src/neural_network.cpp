@@ -34,17 +34,17 @@ void NeuralNetwork::forward(const float Input[]){
             Accum += Input[j]/100. * HiddenWeights[j*HiddenNodes + i]; // Input scale down by 100
         }
         // Changed the activation to RELU
-        if (Accum >= 0){
-            Hidden[i] = Accum;
-        }
-        else {
-            Hidden[i] = 0.0;
-        }
+        // if (Accum >= 0){
+        //     Hidden[i] = Accum;
+        // }
+        // else {
+        //     Hidden[i] = 0.0;
+        // }
         // Original sigmoid activation
         // Hidden[i] = 1.0 / (1.0 + exp(-Accum));
 
         // Changed the activation to identity
-        // Hidden[i] = Accum;
+        Hidden[i] = Accum;
     }
 }
 
@@ -55,17 +55,17 @@ void NeuralNetwork::backward(const float Input[]){
     ******************************************************************/
     for(int i = 0 ; i < HiddenNodes ; i++ ) {
         // Changed the dW calculation to RELU (backward)   
-        if (Error[i] < 0){
-            HiddenDelta[i] = 0.0;
-        }
-        else{
-            HiddenDelta[i] = Error[i] * Hidden[i];
-        }
+        // if (Error[i] < 0){
+        //     HiddenDelta[i] = 0.0;
+        // }
+        // else{
+        //     HiddenDelta[i] = Error[i] * Hidden[i];
+        // }
         // Original sigmoid activation (backward)
         // HiddenDelta[i] = Error[i] * Hidden[i] * (1.0 - Hidden[i]) ;
 
         // Changed the dW calculation to Identity (backward)   
-        // HiddenDelta[i] = Error[i] * Hidden[i];
+        HiddenDelta[i] = Error[i] * Hidden[i];
     }
 
     /******************************************************************

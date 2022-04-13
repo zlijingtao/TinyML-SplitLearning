@@ -23,6 +23,8 @@ np.random.seed(4321)
 
 samples_per_device = 300 # Amount of samples of each word to send to each device
 batch_size = 10 # Must be even, hsa to be split into 2 types of samples
+running_batch_accu = 0
+running_batch_accu_list = []
 # experiment = 'iid' # 'iid', 'no-iid', 'train-test'
 experiment = 'iid' # 'iid', 'no-iid', 'train-test'
 
@@ -179,6 +181,10 @@ def server_compute(Hidden, target, only_forward = False):
 
     error = loss.detach().cpu().numpy()
     
+    accu = torch.argmax(output) == label
+
+    accu = accu.detach().cpu().numpy()
+
     if not only_forward:
 
         loss.backward(retain_graph = True)
@@ -191,14 +197,16 @@ def server_compute(Hidden, target, only_forward = False):
         
     if not only_forward:
         print(output.detach().cpu().numpy())
-        return error, error_array
+        return accu, error, error_array
     else:
-        return error
+        return accu, error
 
 
 def server_validate(test_in, test_out):
     # multiple_batch
     input = torch.tensor(test_in, requires_grad=True).float().cuda()
+    # input = input/100.
+    # print(input)
     
     label = torch.from_numpy(test_out).view(input.size(0), ).long().cuda()
 
@@ -389,6 +397,7 @@ def sendSamplesNonIID(device, deviceIndex, batch_size, batch_index):
         sendSample(device, f"datasets/{dir}/{filename}", num_button, deviceIndex)
 
 def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False):
+    global running_batch_accu
     with open(samplePath) as f:
         data = json.load(f)
         device.write(b't')
@@ -434,7 +443,7 @@ def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False
             label = convert_string_to_array(str(num_button), one_hot = True)
             print(f"Outputs: ", hidden_activation)
             print(f"label: ", num_button)
-            forward_error = server_compute(hidden_activation, label, only_forward= True)
+            forward_accu, forward_error = server_compute(hidden_activation, label, only_forward= True)
         else:
             # Receive label from client
             nb = device.readline()[:-2]
@@ -444,8 +453,8 @@ def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False
             label = convert_string_to_array(str(nb), one_hot = True)
             print(f"Outputs: ", hidden_activation)
             print(f"label: ", label)
-            forward_error, error_array = server_compute(hidden_activation, label, only_forward= False)
-        
+            forward_accu, forward_error, error_array = server_compute(hidden_activation, label, only_forward= False)
+            
             # Send Error Array to client to continue backward #TODO: implement this
             for i in range(size_hidden_nodes): # hidden layer
                 d.read() # wait until confirmatio
@@ -466,6 +475,7 @@ def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False
         ne = device.readline()[:-2]
 
         n_epooch = int(ne)
+        running_batch_accu += forward_accu
         graph.append([n_epooch, forward_error, deviceIndex])
         print(f"Error: ", forward_error)
 
@@ -549,6 +559,32 @@ def plot_graph():
         # plt.xlim(bottom=0)
         # plt.autoscale()
         repaint_graph = False
+
+    plt.pause(2)
+
+def plot_train_accu():
+    global running_batch_accu_list
+
+    # if (repaint_graph):
+    colors = ['r', 'g', 'b', 'y']
+    markers = ['-', '--', ':', '-.']
+    #devices =  [x[2] for x in graph]
+    running_batch_accu_list
+    # for device_index, device in enumerate(devices):
+    #     epoch = [x[0] for x in graph if x[2] == device_index]
+    #     error = [x[1] for x in graph if x[2] == device_index]
+    
+    plt.plot(running_batch_accu_list, 'g-', label=f"Train_Accu")
+
+    plt.legend()
+    plt.xlim(left=0)
+    plt.ylim(bottom=0, top=1.0)
+    plt.ylabel('Accu') # or Error
+    plt.xlabel('Image')
+    # plt.axes().set_ylim([0, 0.6])
+    # plt.xlim(bottom=0)
+    # plt.autoscale()
+    # repaint_graph = False
 
     plt.pause(2)
 
@@ -787,7 +823,9 @@ ini_time = time.time()
 # Train the device
 epoch_size = 1 # default = 1
 for _ in range(epoch_size):
+    
     for batch in range(int(samples_per_device/batch_size)):
+        running_batch_accu = 0
         for deviceIndex, device in enumerate(devices):
             if experiment == 'iid' or experiment == 'train-test':
                 thread = threading.Thread(target=sendSamplesIID, args=(device, deviceIndex, batch_size, batch))
@@ -799,7 +837,9 @@ for _ in range(epoch_size):
             threads.append(thread)
         for thread in threads: thread.join() # Wait for all the threads to end
         startFL()
-
+        print("This round accuracy is {}.".format(running_batch_accu/batch_size))
+        running_batch_accu_list.append(running_batch_accu/batch_size)
+    
 train_time = time.time()-ini_time
 # print(f'Trained in ({train_time} seconds)')
 
@@ -853,3 +893,18 @@ plot_val_graph()
 figname2 = f"newplots/ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-TT{train_time}-{experiment}_val.eps"
 plt.savefig(figname2, format='eps')
 print(f"Generated {figname2}")
+
+plt.figure(3)
+plt.ion()
+plt.show()
+plt.rc('font', size=font_sm)          # controls default text sizes
+plt.rc('axes', titlesize=font_sm)     # fontsize of the axes title
+plt.rc('axes', labelsize=font_md)     # fontsize of the x and y labels
+plt.rc('xtick', labelsize=font_sm)    # fontsize of the tick labels
+plt.rc('ytick', labelsize=font_sm)    # fontsize of the tick labels
+plt.rc('legend', fontsize=font_sm)    # legend fontsize
+plt.rc('figure', titlesize=font_xl)   # fontsize of the figure title
+plot_train_accu()
+figname3 = f"newplots/ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-TT{train_time}-{experiment}_train_accu.eps"
+plt.savefig(figname3, format='eps')
+print(f"Generated {figname3}")
