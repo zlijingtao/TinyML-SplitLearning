@@ -54,7 +54,7 @@ output_weight_updates  = np.zeros_like(output_layer)
 momentum = 0.9
 learningRate= 0.02
 number_hidden = 4
-hidden_size = 256
+hidden_size = 512
 
 def init_weights(m):
     if isinstance(m, nn.Linear):
@@ -869,7 +869,7 @@ ini_time = time.time()
 
 
 # Train the device
-epoch_size = 1 # default = 1
+epoch_size = 3 # default = 1
 for _ in range(epoch_size):
     
     for batch in range(int(samples_per_device/batch_size)):
