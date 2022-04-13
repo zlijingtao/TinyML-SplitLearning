@@ -12,6 +12,7 @@ import os
 import random
 import torch
 import torch.nn as nn
+import torch.nn.init as init
 #TODO: compare baseline validation and more layers (or larger model)
 #TODO: try to extinct resources on board. (multi-iamge batch?)
 #TODO: find a way to store some image and pull out them to train.
@@ -21,17 +22,17 @@ import torch.nn as nn
 random.seed(4321)
 np.random.seed(4321)
 
-samples_per_device = 300 # Amount of samples of each word to send to each device
+samples_per_device = 200 # Amount of samples of each word to send to each device
 batch_size = 10 # Must be even, hsa to be split into 2 types of samples
 running_batch_accu = 0
 running_batch_accu_list = []
 # experiment = 'iid' # 'iid', 'no-iid', 'train-test'
-experiment = 'iid' # 'iid', 'no-iid', 'train-test'
+experiment = 'custom' # 'iid', 'no-iid', 'train-test', 'custom'
 
 
 # initialize client-side model
 size_hidden_nodes = 25
-size_output_nodes = 3
+size_output_nodes = 5
 size_hidden_layer = (650+1)*size_hidden_nodes
 hidden_layer = np.random.uniform(-0.5,0.5, size_hidden_layer).astype('float32')
 
@@ -51,18 +52,21 @@ output_layer = np.random.uniform(-0.5, 0.5, size_output_layer).astype('float32')
 output_weight_updates  = np.zeros_like(output_layer)
 
 momentum = 0.9
-learningRate= 0.01
-number_hidden = 1
-hidden_size = 128
-
+learningRate= 0.02
+number_hidden = 4
+hidden_size = 256
 
 def init_weights(m):
-    if type(m) == nn.Linear:
-        torch.nn.init.uniform_(m.weight, a = -0.5, b = 0.5)
-        torch.nn.init.uniform_(m.bias, a = -0.5, b = 0.5)
-    if type(m) == nn.Conv2d:
-        torch.nn.init.uniform_(m.weight, a = -0.5, b = 0.5)
-        torch.nn.init.uniform_(m.bias, a = -0.5, b = 0.5)
+    if isinstance(m, nn.Linear):
+      init.kaiming_normal(m.weight)
+      m.bias.data.zero_()
+# def init_weights(m):
+#     if type(m) == nn.Linear:
+#         torch.nn.init.uniform_(m.weight, a = -0.5, b = 0.5)
+#         torch.nn.init.uniform_(m.bias, a = -0.5, b = 0.5)
+#     if type(m) == nn.Conv2d:
+#         torch.nn.init.uniform_(m.weight, a = -0.5, b = 0.5)
+#         torch.nn.init.uniform_(m.bias, a = -0.5, b = 0.5)
 
 class client_model(nn.Module):
     '''
@@ -120,7 +124,11 @@ s_optimizer = torch.optim.SGD(list(s_model.parameters()), lr=learningRate, momen
 
 
 pauseListen = False # So there are no threads reading the serial input at the same time
-
+all_files = [file for file in os.listdir("datasets/words/all") ]
+must_files = [file for file in os.listdir("datasets/words/must")]
+never_files = [file for file in os.listdir("datasets/words/never")]
+none_files = [file for file in os.listdir("datasets/words/none")]
+only_files = [file for file in os.listdir("datasets/words/only")]
 montserrat_files = [file for file in os.listdir("datasets/mountains") if file.startswith("montserrat")]
 pedraforca_files = [file for file in os.listdir("datasets/mountains") if file.startswith("pedraforca")]
 vermell_files = [file for file in os.listdir("datasets/colors") if file.startswith("vermell")]
@@ -144,11 +152,12 @@ test_mountains = list(sum(zip(test_montserrat_files, test_pedraforca_files), ())
 
 
 def convert_string_to_array(string, one_hot = False):
+    global size_output_nodes
     if not one_hot:
         out_act = np.fromstring(string, dtype=float, sep=' ')
         return out_act
     else:
-        out_label = np.zeros((3,))
+        out_label = np.zeros((size_output_nodes,))
         # string = int.from_bytes(string, "big")
         # print(string)
         out_label[int(string.replace('b', '').replace('\'', '')) - 1] = 1 
@@ -218,7 +227,7 @@ def server_validate(test_in, test_out):
 
     c_model.eval()
 
-    output = s_model(c_model(input))
+    output = s_model(c_model(input/100.))
     
     criterion = nn.CrossEntropyLoss()
     # criterion = nn.MSELoss()
@@ -311,7 +320,44 @@ def init_network(hidden_layer, output_layer, device, deviceIndex):
     print(f"Client-side Model sent to {device.port}")
     modelReceivedConfirmation = device.readline().decode()
     print(f"Model received confirmation: ", modelReceivedConfirmation)
-    
+
+
+def sendSamplesIIDCustom(device, deviceIndex, batch_size, batch_index):
+    global all_files, must_files, never_files, none_files, only_files
+
+    # each_sample_amt = int(batch_size/2)
+
+    start = (deviceIndex*samples_per_device) + (batch_index * batch_size)
+    end = (deviceIndex*samples_per_device) + (batch_index * batch_size) + batch_size
+    real_start = start // 5
+    real_end = (end - start) // 5 + start // 5
+    print(f"[{device.port}] Sending samples from {start} to {end}")
+    for i in range(real_start, real_end):
+        filename = all_files[i]
+        num_button = 1
+        print(f"[{device.port}] Sending sample {filename} ({i}/{len(all_files)}): Class 1: all")
+        sendSample(device, 'datasets/words/all/'+filename, num_button, deviceIndex)
+
+        filename = must_files[i]
+        num_button = 2
+        print(f"[{device.port}] Sending sample {filename} ({i}/{len(must_files)}): Class 2: must")
+        sendSample(device, 'datasets/words/must/'+filename, num_button, deviceIndex)
+
+        filename = never_files[i]
+        num_button = 3
+        print(f"[{device.port}] Sending sample {filename} ({i}/{len(never_files)}): Class 3: never")
+        sendSample(device, 'datasets/words/never/'+filename, num_button, deviceIndex)
+
+        filename = none_files[i]
+        num_button = 4
+        print(f"[{device.port}] Sending sample {filename} ({i}/{len(none_files)}): Class 4: none")
+        sendSample(device, 'datasets/words/none/'+filename, num_button, deviceIndex)
+
+        filename = only_files[i]
+        num_button = 5
+        print(f"[{device.port}] Sending sample {filename} ({i}/{len(only_files)}): Class 5: only")
+        sendSample(device, 'datasets/words/only/'+filename, num_button, deviceIndex)
+
 # Batch size: The amount of samples to send
 def sendSamplesIID(device, deviceIndex, batch_size, batch_index):
     global montserrat_files, pedraforca_files, mountains
@@ -409,10 +455,13 @@ def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False
 
         device.write(struct.pack('B', 1 if only_forward else 0))
         print(f"Only forward confirmation: {device.readline().decode()}") # Button confirmation
-
-        for i, value in enumerate(data['payload']['values']):
-            device.write(struct.pack('h', value))
-
+        
+        if 'payload' in data:
+            for i, value in enumerate(data['payload']['values']):
+                device.write(struct.pack('h', value))
+        else:
+            for i, value in enumerate(data['values']):
+                device.write(struct.pack('h', value))
         print(f"[{device.port}] Sample received confirmation:", device.readline().decode())
         
 
@@ -737,17 +786,16 @@ def startFL():
         print(f'Average millis: {(time.time()*1000)-ini_time} milliseconds)')
 
     # Doing validation
-    c_model.load_state_dict({'client.0.weight': torch.tensor(hidden_layer[:size_hidden_nodes*650]).view(650, size_hidden_nodes).t().float(), 'client.0.bias': torch.tensor(hidden_layer[size_hidden_nodes*650:]).float()})
+    # c_model.load_state_dict({'client.0.weight': torch.tensor(hidden_layer[:size_hidden_nodes*650]).view(650, size_hidden_nodes).t().float(), 'client.0.bias': torch.tensor(hidden_layer[size_hidden_nodes*650:]).float()})
     
-    # get test data #TODO: figure how to do mfcc
-    test_in, test_out = getSamplesIID(60, 300)
+    # test_in, test_out = getSamplesIID(50, 200)
 
-    error, accu = server_validate(test_in, test_out)
-    print("======Testing Start======")
-    print(f"==Error {error}==")
-    print(f"==Accuracy {accu}==")
-    val_graph.append([error, accu, 0])
-    print("======Testing End======")
+    # error, accu = server_validate(test_in, test_out)
+    # print("======Testing Start======")
+    # print(f"==Error {error}==")
+    # print(f"==Accuracy {accu}==")
+    # val_graph.append([error, accu, 0])
+    # print("======Testing End======")
 
     #################
     # Sending models
@@ -831,7 +879,9 @@ for _ in range(epoch_size):
                 thread = threading.Thread(target=sendSamplesIID, args=(device, deviceIndex, batch_size, batch))
             elif experiment == 'no-iid':
                 thread = threading.Thread(target=sendSamplesNonIID, args=(device, deviceIndex, batch_size, batch))
-                
+            elif experiment == 'custom':
+                thread = threading.Thread(target=sendSamplesIIDCustom, args=(device, deviceIndex, batch_size, batch))
+
             thread.daemon = True
             thread.start()
             threads.append(thread)
@@ -875,24 +925,24 @@ plt.rc('legend', fontsize=font_sm)    # legend fontsize
 plt.rc('figure', titlesize=font_xl)   # fontsize of the figure title
 
 plot_graph()
-figname = f"newplots/ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-TT{train_time}-{experiment}_train.eps"
+figname = f"newplots/ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-HN{size_hidden_nodes}-TT{train_time}-{experiment}_train.eps"
 plt.savefig(figname, format='eps')
 print(f"Generated {figname}")
 
-plt.figure(2)
-plt.ion()
-plt.show()
-plt.rc('font', size=font_sm)          # controls default text sizes
-plt.rc('axes', titlesize=font_sm)     # fontsize of the axes title
-plt.rc('axes', labelsize=font_md)     # fontsize of the x and y labels
-plt.rc('xtick', labelsize=font_sm)    # fontsize of the tick labels
-plt.rc('ytick', labelsize=font_sm)    # fontsize of the tick labels
-plt.rc('legend', fontsize=font_sm)    # legend fontsize
-plt.rc('figure', titlesize=font_xl)   # fontsize of the figure title
-plot_val_graph()
-figname2 = f"newplots/ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-TT{train_time}-{experiment}_val.eps"
-plt.savefig(figname2, format='eps')
-print(f"Generated {figname2}")
+# plt.figure(2)
+# plt.ion()
+# plt.show()
+# plt.rc('font', size=font_sm)          # controls default text sizes
+# plt.rc('axes', titlesize=font_sm)     # fontsize of the axes title
+# plt.rc('axes', labelsize=font_md)     # fontsize of the x and y labels
+# plt.rc('xtick', labelsize=font_sm)    # fontsize of the tick labels
+# plt.rc('ytick', labelsize=font_sm)    # fontsize of the tick labels
+# plt.rc('legend', fontsize=font_sm)    # legend fontsize
+# plt.rc('figure', titlesize=font_xl)   # fontsize of the figure title
+# plot_val_graph()
+# figname2 = f"newplots/ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-HN{size_hidden_nodes}-TT{train_time}-{experiment}_val.eps"
+# plt.savefig(figname2, format='eps')
+# print(f"Generated {figname2}")
 
 plt.figure(3)
 plt.ion()
@@ -905,6 +955,6 @@ plt.rc('ytick', labelsize=font_sm)    # fontsize of the tick labels
 plt.rc('legend', fontsize=font_sm)    # legend fontsize
 plt.rc('figure', titlesize=font_xl)   # fontsize of the figure title
 plot_train_accu()
-figname3 = f"newplots/ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-TT{train_time}-{experiment}_train_accu.eps"
+figname3 = f"newplots/ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-HN{size_hidden_nodes}-TT{train_time}-{experiment}_train_accu.eps"
 plt.savefig(figname3, format='eps')
 print(f"Generated {figname3}")
