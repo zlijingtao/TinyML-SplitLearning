@@ -141,24 +141,24 @@ void train(int nb, bool only_forward) {
 
     
 
-    myNetwork.forward(features_matrix.buffer);
+    // myNetwork.forward(features_matrix.buffer);
 
     // Sending inputs to Server 
-    // float* myinput = features_matrix.buffer;
-    // for (size_t i = 0; i < 50; i++) {
-    //     for (size_t j = 0; j < 13; j++) {
-    //         ei_printf_float(myinput[i*13 + j]);
-    //         Serial.print(" ");
-    //     }
-    //     Serial.print("\r\n");
-    // }
-    // Sending activation/label to Server 
-    float* myOutput = myNetwork.get_output();
-    for (size_t i = 0; i < 25; i++) {
-        ei_printf_float(myOutput[i]);
-        Serial.print(" ");
+    float* myinput = features_matrix.buffer;
+    for (size_t i = 0; i < 50; i++) {
+        for (size_t j = 0; j < 13; j++) {
+            ei_printf_float(myinput[i*13 + j]);
+            Serial.print(" ");
+        }
+        Serial.print("\r\n");
     }
-    Serial.print("\r\n");
+    // Sending activation/label to Server 
+    // float* myOutput = myNetwork.get_output();
+    // for (size_t i = 0; i < 25; i++) {
+    //     ei_printf_float(myOutput[i]);
+    //     Serial.print(" ");
+    // }
+    // Serial.print("\r\n");
 
     
 
@@ -168,17 +168,17 @@ void train(int nb, bool only_forward) {
         Serial.println(nb, DEC);
 
         // Receive error from server
-        char* Error = (char*) myNetwork.get_Error();
-        for (uint16_t i = 0; i < HiddenNodes; ++i) {
-            Serial.write('n');
-            while(Serial.available() < 4) {}
-            for (int n = 0; n < 4; n++) {
-                Error[i*4+n] = Serial.read();
-            }
-        }
+        // char* Error = (char*) myNetwork.get_Error();
+        // for (uint16_t i = 0; i < HiddenNodes; ++i) {
+        //     Serial.write('n');
+        //     while(Serial.available() < 4) {}
+        //     for (int n = 0; n < 4; n++) {
+        //         Error[i*4+n] = Serial.read();
+        //     }
+        // }
 
         // BACKWARD
-        myNetwork.backward(features_matrix.buffer);
+        // myNetwork.backward(features_matrix.buffer);
         ++num_epochs;
     }
 

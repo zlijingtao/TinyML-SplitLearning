@@ -28,7 +28,7 @@ running_batch_accu = 0
 running_batch_accu_list = []
 # experiment = 'iid' # 'iid', 'no-iid', 'train-test'
 experiment = 'custom' # 'iid', 'no-iid', 'train-test', 'custom'
-
+sgd_counter = 0
 
 # initialize client-side model
 size_hidden_nodes = 25
@@ -53,7 +53,7 @@ output_weight_updates  = np.zeros_like(output_layer)
 
 momentum = 0.9
 learningRate= 0.02
-number_hidden = 4
+number_hidden = 1
 hidden_size = 512
 
 def init_weights(m):
@@ -91,12 +91,20 @@ class server_model(nn.Module):
     '''
     VGG model 
     '''
-    def __init__(self, num_class = 3, number_hidden = 1, hidden_size = 128, input_size = 25):
+    def __init__(self, num_class = 3, number_hidden = 1, hidden_size = 128, input_size = (50, 13)):
         super(server_model, self).__init__()
 
         last_layer_input_size = input_size
         model_list = []
-
+        model_list.append(nn.Conv1d(13, 32, kernel_size = 5, padding="same"))
+        model_list.append(nn.ReLU())
+        model_list.append(nn.Dropout(0.25))
+        last_layer_input_size = 1600
+        model_list.append(nn.Conv1d(32, 16, 3, padding="same"))
+        model_list.append(nn.ReLU())
+        model_list.append(nn.Dropout(0.25))
+        model_list.append(nn.Flatten(0))
+        last_layer_input_size = 800
         for _ in range(number_hidden):
             model_list.append(nn.Linear(last_layer_input_size, hidden_size, bias = True))
             model_list.append(nn.ReLU())
@@ -164,10 +172,10 @@ def convert_string_to_array(string, one_hot = False):
         return out_label
 
 
-def server_compute(Hidden, target, only_forward = False):
-
+def server_compute(input, target, only_forward = False):
+    global sgd_counter
     # input = torch.from_numpy(Hidden).cuda()
-    input = torch.tensor(Hidden, requires_grad=True).float().cuda()
+    input = torch.tensor(input, requires_grad=True).float().cuda()
     
     # label = torch.from_numpy(target).float().cuda()
     label = torch.argmax(torch.from_numpy(target).float()).cuda()
@@ -175,10 +183,12 @@ def server_compute(Hidden, target, only_forward = False):
     s_model.cuda()
 
     s_model.train()
-    
-    s_optimizer.zero_grad()
 
-    input.retain_grad()
+    if sgd_counter  == 0:
+        s_optimizer.zero_grad() #TODO: test not perform update but accumualting grads before each updating.
+        # use multiple batch = 1 to simulate a batch size > 1 update.
+
+    # input.retain_grad()
 
     output = s_model(input)
     
@@ -194,21 +204,21 @@ def server_compute(Hidden, target, only_forward = False):
 
     accu = accu.detach().cpu().numpy()
 
+    print("output: {}".format(str(output.detach().cpu().numpy())))
+
     if not only_forward:
-
-        loss.backward(retain_graph = True)
-
+        
+        loss.backward()
+        sgd_counter += 1
         # get gradient
-        error_array = input.grad.detach().cpu().numpy()
-        
-        s_optimizer.step()
+        # error_array = input.grad.detach().cpu().numpy()
+        if sgd_counter % 5 == 0:
+            sgd_counter = 0
+            s_optimizer.step()
 
         
-    if not only_forward:
-        print(output.detach().cpu().numpy())
-        return accu, error, error_array
-    else:
-        return accu, error
+
+    return accu, error
 
 
 def server_validate(test_in, test_out):
@@ -227,7 +237,7 @@ def server_validate(test_in, test_out):
 
     c_model.eval()
 
-    output = s_model(c_model(input/100.))
+    output = s_model(c_model(input))
     
     criterion = nn.CrossEntropyLoss()
     # criterion = nn.MSELoss()
@@ -466,12 +476,13 @@ def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False
         
 
         #Receive input from client
-        # input_list = []
-        # for _ in range(50):
-        #     inputs = device.readline().decode()
-        #     inputs_converted = convert_string_to_array(inputs)
-        #     input_list.append(inputs_converted)
-        # input_array = np.concatenate(input_list, axis = 0).reshape(1,650)
+        input_list = []
+        for _ in range(50):
+            inputs = device.readline().decode()
+            inputs_converted = convert_string_to_array(inputs)
+            input_list.append(inputs_converted)
+        input_array = np.transpose(np.concatenate(input_list, axis = 0).reshape(50, 13))
+        # .reshape(1,650)
         # print(f"test_input: ", input_array)
 
         # if num_button == 1:
@@ -484,32 +495,32 @@ def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False
 
 
         # Receive activation from client
-        outputs = device.readline().decode()
+        # outputs = device.readline().decode()
 
         if only_forward:
             # Perform server-side computation (forward)
-            hidden_activation = convert_string_to_array(outputs)
+            # hidden_activation = convert_string_to_array(outputs)
             label = convert_string_to_array(str(num_button), one_hot = True)
-            print(f"Outputs: ", hidden_activation)
+            # print(f"input: ", input_array)
             print(f"label: ", num_button)
-            forward_accu, forward_error = server_compute(hidden_activation, label, only_forward= True)
+            forward_accu, forward_error = server_compute(input_array, label, only_forward= True)
         else:
             # Receive label from client
             nb = device.readline()[:-2]
             # print(str(nb))
             # Perform server-side computation (forward/backward)
-            hidden_activation = convert_string_to_array(outputs)
+            # hidden_activation = convert_string_to_array(outputs)
             label = convert_string_to_array(str(nb), one_hot = True)
-            print(f"Outputs: ", hidden_activation)
+            # print(f"input: ", input_array)
             print(f"label: ", label)
-            forward_accu, forward_error, error_array = server_compute(hidden_activation, label, only_forward= False)
+            forward_accu, forward_error = server_compute(input_array, label, only_forward= False)
             
             # Send Error Array to client to continue backward #TODO: implement this
-            for i in range(size_hidden_nodes): # hidden layer
-                d.read() # wait until confirmatio
-                float_num = error_array[i]
-                data = struct.pack('f', float_num)
-                d.write(data)
+            # for i in range(size_hidden_nodes): # hidden layer
+            #     d.read() # wait until confirmatio
+            #     float_num = error_array[i]
+            #     data = struct.pack('f', float_num)
+            #     d.write(data)
 
             # sendmodel_confirmation = d.readline().decoder()
             # print(f'Model sent confirmation: {sendmodel_confirmation}')
