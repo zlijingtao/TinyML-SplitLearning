@@ -29,7 +29,7 @@ running_batch_accu_list = []
 # experiment = 'iid' # 'iid', 'no-iid', 'train-test'
 experiment = 'custom' # 'iid', 'no-iid', 'train-test', 'custom'
 sgd_counter = 0
-eq_batch_size = 10
+eq_batch_size = 5
 
 # initialize client-side model
 size_hidden_nodes = 25
@@ -54,8 +54,8 @@ output_weight_updates  = np.zeros_like(output_layer)
 
 momentum = 0.9
 learningRate= 0.02
-number_hidden = 1
-hidden_size = 512
+number_hidden = 2
+hidden_size = 128
 
 def init_weights(m):
     if isinstance(m, nn.Linear):
@@ -99,11 +99,11 @@ class server_model(nn.Module):
         model_list = []
         model_list.append(nn.Conv1d(13, 32, kernel_size = 5, padding="same"))
         model_list.append(nn.ReLU())
-        model_list.append(nn.Dropout(0.25))
+        # model_list.append(nn.Dropout(0.25))
         last_layer_input_size = 1600
-        model_list.append(nn.Conv1d(32, 16, 3, padding="same"))
+        model_list.append(nn.Conv1d(32, 16, kernel_size = 3, padding="same"))
         model_list.append(nn.ReLU())
-        model_list.append(nn.Dropout(0.25))
+        # model_list.append(nn.Dropout(0.25))
         model_list.append(nn.Flatten(0))
         last_layer_input_size = 800
         for _ in range(number_hidden):
@@ -173,26 +173,26 @@ def convert_string_to_array(string, one_hot = False):
         return out_label
 
 
-def server_compute(input, target, only_forward = False):
+def server_compute(model, optimizer, input, target, only_forward = False):
     global sgd_counter, eq_batch_size
-    global s_model, s_optimizer
+    # global s_model, s_optimizer
     # input = torch.from_numpy(Hidden).cuda()
     input = torch.tensor(input, requires_grad=True).float().cuda()
     
     # label = torch.from_numpy(target).float().cuda()
     label = torch.argmax(torch.from_numpy(target).float()).cuda()
 
-    s_model.cuda()
+    model.cuda()
 
-    s_model.train()
+    model.train()
 
     if sgd_counter  == 0:
-        s_optimizer.zero_grad() #TODO: test not perform update but accumualting grads before each updating.
+        optimizer.zero_grad() #TODO: test not perform update but accumualting grads before each updating.
         # use multiple batch = 1 to simulate a batch size > 1 update.
 
     # input.retain_grad()
 
-    output = s_model(input)
+    output = model(input)
     
     criterion = nn.CrossEntropyLoss()
     # criterion = nn.MSELoss()
@@ -216,7 +216,7 @@ def server_compute(input, target, only_forward = False):
         # error_array = input.grad.detach().cpu().numpy()
         if sgd_counter % eq_batch_size == 0:
             sgd_counter = 0
-            s_optimizer.step()
+            optimizer.step()
 
         
 
@@ -456,7 +456,7 @@ def sendSamplesNonIID(device, deviceIndex, batch_size, batch_index):
         sendSample(device, f"datasets/{dir}/{filename}", num_button, deviceIndex)
 
 def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False):
-    global running_batch_accu
+    global running_batch_accu, s_model, s_optimizer
     with open(samplePath) as f:
         data = json.load(f)
         device.write(b't')
@@ -484,8 +484,8 @@ def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False
             inputs = device.readline().decode()
             inputs_converted = convert_string_to_array(inputs)
             input_list.append(inputs_converted)
-        # input_array = np.transpose(np.concatenate(input_list, axis = 0).reshape(50, 13))
-        input_array = np.concatenate(input_list, axis = 0).reshape(13, 50)
+        input_array = np.transpose(np.concatenate(input_list, axis = 0).reshape(50, 13))
+        # input_array = np.concatenate(input_list, axis = 0).reshape(13, 50)
         # .reshape(1,650)
         # print(f"test_input: ", input_array)
 
@@ -507,7 +507,7 @@ def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False
             label = convert_string_to_array(str(num_button), one_hot = True)
             # print(f"input: ", input_array)
             print(f"label: ", num_button)
-            forward_accu, forward_error = server_compute(input_array, label, only_forward= True)
+            forward_accu, forward_error = server_compute(s_model, s_optimizer, input_array, label, only_forward= True)
         else:
             # Receive label from client
             nb = device.readline()[:-2]
@@ -517,7 +517,7 @@ def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False
             label = convert_string_to_array(str(nb), one_hot = True)
             # print(f"input: ", input_array)
             print(f"label: ", label)
-            forward_accu, forward_error = server_compute(input_array, label, only_forward= False)
+            forward_accu, forward_error = server_compute(s_model, s_optimizer, input_array, label, only_forward= False)
             
             # Send Error Array to client to continue backward #TODO: implement this
             # for i in range(size_hidden_nodes): # hidden layer
