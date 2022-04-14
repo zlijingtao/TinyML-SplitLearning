@@ -29,6 +29,7 @@ running_batch_accu_list = []
 # experiment = 'iid' # 'iid', 'no-iid', 'train-test'
 experiment = 'custom' # 'iid', 'no-iid', 'train-test', 'custom'
 sgd_counter = 0
+eq_batch_size = 10
 
 # initialize client-side model
 size_hidden_nodes = 25
@@ -173,7 +174,8 @@ def convert_string_to_array(string, one_hot = False):
 
 
 def server_compute(input, target, only_forward = False):
-    global sgd_counter
+    global sgd_counter, eq_batch_size
+    global s_model, s_optimizer
     # input = torch.from_numpy(Hidden).cuda()
     input = torch.tensor(input, requires_grad=True).float().cuda()
     
@@ -212,7 +214,7 @@ def server_compute(input, target, only_forward = False):
         sgd_counter += 1
         # get gradient
         # error_array = input.grad.detach().cpu().numpy()
-        if sgd_counter % 5 == 0:
+        if sgd_counter % eq_batch_size == 0:
             sgd_counter = 0
             s_optimizer.step()
 
@@ -222,6 +224,7 @@ def server_compute(input, target, only_forward = False):
 
 
 def server_validate(test_in, test_out):
+    global s_model, c_model, s_optimizer
     # multiple_batch
     input = torch.tensor(test_in, requires_grad=True).float().cuda()
     # input = input/100.
@@ -481,7 +484,8 @@ def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False
             inputs = device.readline().decode()
             inputs_converted = convert_string_to_array(inputs)
             input_list.append(inputs_converted)
-        input_array = np.transpose(np.concatenate(input_list, axis = 0).reshape(50, 13))
+        # input_array = np.transpose(np.concatenate(input_list, axis = 0).reshape(50, 13))
+        input_array = np.concatenate(input_list, axis = 0).reshape(13, 50)
         # .reshape(1,650)
         # print(f"test_input: ", input_array)
 
@@ -936,7 +940,7 @@ plt.rc('legend', fontsize=font_sm)    # legend fontsize
 plt.rc('figure', titlesize=font_xl)   # fontsize of the figure title
 
 plot_graph()
-figname = f"newplots/ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-HN{size_hidden_nodes}-TT{train_time}-{experiment}_train.eps"
+figname = f"newplots/ES{epoch_size}-BS{eq_batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-HN{size_hidden_nodes}-TT{train_time}-{experiment}_train.eps"
 plt.savefig(figname, format='eps')
 print(f"Generated {figname}")
 
@@ -966,6 +970,6 @@ plt.rc('ytick', labelsize=font_sm)    # fontsize of the tick labels
 plt.rc('legend', fontsize=font_sm)    # legend fontsize
 plt.rc('figure', titlesize=font_xl)   # fontsize of the figure title
 plot_train_accu()
-figname3 = f"newplots/ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-HN{size_hidden_nodes}-TT{train_time}-{experiment}_train_accu.eps"
+figname3 = f"newplots/ES{epoch_size}-BS{eq_batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-HN{size_hidden_nodes}-TT{train_time}-{experiment}_train_accu.eps"
 plt.savefig(figname3, format='eps')
 print(f"Generated {figname3}")
