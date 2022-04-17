@@ -6,7 +6,6 @@
  * Network Configuration - customized per network 
  ******************************************************************/
 
-static const int PatternCount = 3;
 static const int InputNodes = 650;
 static const int HiddenNodes = 25;
 static const float InitialWeightMax = 0.5;
@@ -35,7 +34,7 @@ class NeuralNetwork {
         float HiddenDelta[HiddenNodes] = {};
         float ChangeHiddenWeights[(InputNodes+1) * HiddenNodes] = {};
 
-        float LearningRate = 0.02;
+        float LearningRate = 0.01;
         float Momentum = 0.9;
 };
 

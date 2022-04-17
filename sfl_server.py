@@ -22,20 +22,26 @@ import torch.nn.init as init
 random.seed(4321)
 np.random.seed(4321)
 
-samples_per_device = 200 # Amount of samples of each word to send to each device
+samples_per_device = 350 # Amount of samples of each word to send to each device
 batch_size = 10 # Must be even, hsa to be split into 2 types of samples
 running_batch_accu = 0
 running_batch_accu_list = []
 # experiment = 'iid' # 'iid', 'no-iid', 'train-test'
-experiment = 'custom' # 'iid', 'no-iid', 'train-test', 'custom'
-
+experiment = 'digits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
 
 # initialize client-side model
 size_hidden_nodes = 25
-size_output_nodes = 5
+if experiment == "custom":
+    size_output_nodes = 5
+elif experiment == 'digits':
+    size_output_nodes = 7
+    batch_size = 14 # Must be even, hsa to be split into 2 types of samples
+else:
+    size_output_nodes = 3
 size_hidden_layer = (650+1)*size_hidden_nodes
-hidden_layer = np.random.uniform(-0.5,0.5, size_hidden_layer).astype('float32')
+# hidden_layer = np.random.uniform(-0.5,0.5, size_hidden_layer).astype('float32')
 
+hidden_layer = (np.random.normal(size=(size_hidden_layer, )) * np.sqrt(2./650)).astype('float32')
 
 # # We add an extra layer at the server-side model
 # neuron_layer_2nd = 2 * size_hidden_nodes
@@ -52,9 +58,9 @@ output_layer = np.random.uniform(-0.5, 0.5, size_output_layer).astype('float32')
 output_weight_updates  = np.zeros_like(output_layer)
 
 momentum = 0.9
-learningRate= 0.02
-number_hidden = 4
-hidden_size = 512
+learningRate= 0.01
+number_hidden = 0
+hidden_size = 64
 
 def init_weights(m):
     if isinstance(m, nn.Linear):
@@ -137,6 +143,23 @@ blau_files = [file for file in os.listdir("datasets/colors") if file.startswith(
 test_montserrat_files = [file for file in os.listdir("datasets/test/") if file.startswith("montserrat")]
 test_pedraforca_files = [file for file in os.listdir("datasets/test") if file.startswith("pedraforca")]
 
+digits_silence_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("silence")]
+digits_one_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("one")]
+digits_two_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("two")]
+digits_three_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("three")]
+digits_four_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("four")]
+digits_five_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("five")]
+digits_unknown_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("unknown")]
+
+digits_silence_test_files = [file for file in os.listdir("datasets/CN_digits_test") if file.startswith("silence")]
+digits_one_test_files = [file for file in os.listdir("datasets/CN_digits_test") if file.startswith("one")]
+digits_two_test_files = [file for file in os.listdir("datasets/CN_digits_test") if file.startswith("two")]
+digits_three_test_files = [file for file in os.listdir("datasets/CN_digits_test") if file.startswith("three")]
+digits_four_test_files = [file for file in os.listdir("datasets/CN_digits_test") if file.startswith("four")]
+digits_five_test_files = [file for file in os.listdir("datasets/CN_digits_test") if file.startswith("five")]
+digits_unknown_test_files = [file for file in os.listdir("datasets/CN_digits_test") if file.startswith("unknown")]
+
+
 graph = []
 repaint_graph = True
 
@@ -165,57 +188,57 @@ def convert_string_to_array(string, one_hot = False):
 
 
 def server_compute(Hidden, target, only_forward = False):
-
-    # input = torch.from_numpy(Hidden).cuda()
     input = torch.tensor(Hidden, requires_grad=True).float().cuda()
-    
-    # label = torch.from_numpy(target).float().cuda()
     label = torch.argmax(torch.from_numpy(target).float()).cuda()
-
+    # target = torch.from_numpy(target).float().cuda()
+    # print(target)
     s_model.cuda()
-
     s_model.train()
-    
     s_optimizer.zero_grad()
-
-    input.retain_grad()
-
-    output = s_model(input)
     
+    
+    input.retain_grad()
+    # logsoftmax 
+    output = s_model(input)
+    # logsoftmax = nn.LogSoftmax(dim = 0)
     criterion = nn.CrossEntropyLoss()
-    # criterion = nn.MSELoss()
-
     loss = criterion(output, label)
-    # loss = criterion(output, label) * 1 / size_output_nodes
+    # log_prob = torch.nn.functional.log_softmax(output)
+
+
+
+    # loss = torch.mean(torch.sum(-target * logsoftmax(output))) # use with gradient descent
+    # loss = -torch.mean(torch.sum(target * logsoftmax(output))) # use with gradient ascent
+
 
     error = loss.detach().cpu().numpy()
     
-    accu = torch.argmax(output) == label
+    
 
-    accu = accu.detach().cpu().numpy()
-
+    
+    
     if not only_forward:
-
+        if input.grad is not None:
+            input.grad.zero_()
         loss.backward(retain_graph = True)
 
-        # get gradient
-        error_array = input.grad.detach().cpu().numpy()
-        
-        s_optimizer.step()
+        error_array = input.grad.detach().cpu().numpy().astype('float32') # get gradient, the -1 is important, since updates are added to the weights in cpp.
 
-        
-    if not only_forward:
-        print(output.detach().cpu().numpy())
+        s_optimizer.step()
+        # print("logits:", output.detach().cpu().numpy())
+        # print("error_array:", error_array)
+        accu = torch.argmax(output) == label
+        accu = accu.detach().cpu().numpy()
         return accu, error, error_array
     else:
+        accu = torch.argmax(output) == label
+        accu = accu.detach().cpu().numpy()
         return accu, error
 
 
 def server_validate(test_in, test_out):
     # multiple_batch
     input = torch.tensor(test_in, requires_grad=True).float().cuda()
-    # input = input/100.
-    # print(input)
     
     label = torch.from_numpy(test_out).view(input.size(0), ).long().cuda()
 
@@ -227,13 +250,11 @@ def server_validate(test_in, test_out):
 
     c_model.eval()
 
-    output = s_model(c_model(input/100.))
+    output = s_model(c_model(input))
     
     criterion = nn.CrossEntropyLoss()
-    # criterion = nn.MSELoss()
 
     loss = criterion(output, label)
-    # loss = criterion(output, label) * 1 / size_output_nodes
 
     error = loss.detach().cpu().numpy() / input.size(0)
 
@@ -358,6 +379,54 @@ def sendSamplesIIDCustom(device, deviceIndex, batch_size, batch_index):
         print(f"[{device.port}] Sending sample {filename} ({i}/{len(only_files)}): Class 5: only")
         sendSample(device, 'datasets/words/only/'+filename, num_button, deviceIndex)
 
+
+def sendSamplesIIDDigits(device, deviceIndex, batch_size, batch_index):
+    global digits_silence_files, digits_one_files, digits_two_files, digits_three_files, digits_four_files, digits_five_files, digits_unknown_files
+
+    # each_sample_amt = int(batch_size/2)
+
+    start = (deviceIndex*samples_per_device) + (batch_index * batch_size)
+    end = (deviceIndex*samples_per_device) + (batch_index * batch_size) + batch_size
+    real_start = start // 7
+    real_end = (end - start) // 7 + start // 7
+    print(f"[{device.port}] Sending samples from {start} to {end}")
+    for i in range(real_start, real_end):
+
+        filename = digits_silence_files[i]
+        num_button = 1
+        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_silence_files)}): Class 0: Silence")
+        sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
+        
+        filename = digits_one_files[i]
+        num_button = 2
+        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_one_files)}): Class 1: One")
+        sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
+
+        filename = digits_two_files[i]
+        num_button = 3
+        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_two_files)}): Class 2: Two")
+        sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
+
+        filename = digits_three_files[i]
+        num_button = 4
+        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_three_files)}): Class 3: Three")
+        sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
+
+        filename = digits_four_files[i]
+        num_button = 5
+        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_four_files)}): Class 4: Four")
+        sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
+
+        filename = digits_five_files[i]
+        num_button = 6
+        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_five_files)}): Class 5: only")
+        sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
+
+        filename = digits_unknown_files[i]
+        num_button = 7
+        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_unknown_files)}): Class 6: Unknown")
+        sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
+
 # Batch size: The amount of samples to send
 def sendSamplesIID(device, deviceIndex, batch_size, batch_index):
     global montserrat_files, pedraforca_files, mountains
@@ -479,7 +548,7 @@ def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False
         # elif num_button == 2:
         #     np.save("processed_datasets/mountains/pedraforca_{}".format(samplePath.split("/")[-1].split(".")[1]), input_array)
 
-        # test_output = c_model(torch.tensor(input_array/100.).float())
+        # test_output = c_model(torch.tensor(input_array).float())
         # print(f"test_Outputs: ", test_output)
 
 
@@ -881,6 +950,8 @@ for _ in range(epoch_size):
                 thread = threading.Thread(target=sendSamplesNonIID, args=(device, deviceIndex, batch_size, batch))
             elif experiment == 'custom':
                 thread = threading.Thread(target=sendSamplesIIDCustom, args=(device, deviceIndex, batch_size, batch))
+            elif experiment == 'digits':
+                thread = threading.Thread(target=sendSamplesIIDDigits, args=(device, deviceIndex, batch_size, batch))
 
             thread.daemon = True
             thread.start()

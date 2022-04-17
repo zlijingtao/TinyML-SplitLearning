@@ -89,7 +89,7 @@ void init_network_model() {
     Serial.write('n');
 
     myNetwork.initialize(learningRate, momentum);
-    // myNetwork.initWeights();
+    myNetwork.initWeights();
 
     char* myHiddenWeights = (char*) myNetwork.get_HiddenWeights();
     for (uint16_t i = 0; i < (InputNodes+1) * HiddenNodes; ++i) {
@@ -138,11 +138,6 @@ void train(int nb, bool only_forward) {
         ei_printf("ERR: Failed to get features (%d)\n", r);
         return;
     }
-
-    
-
-    myNetwork.forward(features_matrix.buffer);
-
     // Sending inputs to Server 
     // float* myinput = features_matrix.buffer;
     // for (size_t i = 0; i < 50; i++) {
@@ -152,6 +147,10 @@ void train(int nb, bool only_forward) {
     //     }
     //     Serial.print("\r\n");
     // }
+    
+
+    myNetwork.forward(features_matrix.buffer);
+
     // Sending activation/label to Server 
     float* myOutput = myNetwork.get_output();
     for (size_t i = 0; i < 25; i++) {
