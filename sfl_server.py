@@ -49,7 +49,7 @@ random.seed(4321)
 np.random.seed(4321)
 
 epoch_size = 3 # default = 1
-samples_per_device = 350 # Amount of samples of each word to send to each device
+samples_per_device = 315 # Amount of samples of each word to send to each device
 batch_size = 10 # Must be even, hsa to be split into 2 types of samples
 running_batch_accu = 0
 running_batch_accu_list = []
@@ -63,13 +63,11 @@ elif experiment == 'digits':
     size_output_nodes = 7
     batch_size = 14 # Must be even, hsa to be split into 2 types of samples
 else:
-    size_output_nodes = 3
+    size_output_nodes = 2
 size_hidden_layer = (650+1)*size_hidden_nodes
 hidden_layer = (np.random.normal(size=(size_hidden_layer, )) * np.sqrt(2./650)).astype('float32')
 
-logger.debug("\n")
-logger.debug("\n")
-logger.debug("Training Setting: dataset {}, Total Round {}, data_per_round {}". format(experiment, epoch_size * int(samples_per_device/batch_size), batch_size))
+logger.debug("\nTraining Setting: dataset {}, Total Round {}, data_per_round {}". format(experiment, epoch_size * int(samples_per_device/batch_size), batch_size))
 
 # # We add an extra layer at the server-side model
 # neuron_layer_2nd = 2 * size_hidden_nodes
@@ -91,7 +89,6 @@ number_hidden = 0
 hidden_size = 64
 
 logger.debug("Model Setting: momentum {}, lr {}, number_hidden {}, hidden_size {}". format(momentum, learningRate, number_hidden, hidden_size))
-
 
 def init_weights(m):
     if isinstance(m, nn.Linear):
@@ -115,7 +112,7 @@ class client_model(nn.Module):
         model_list = []
         
         model_list.append(nn.Linear(650, size_hidden_nodes, bias = True))
-        # model_list.append(nn.ReLU())
+        model_list.append(nn.ReLU())
 
         self.client = nn.Sequential(*model_list)
 
@@ -227,10 +224,6 @@ def server_compute(Hidden, target, only_forward = False):
 
     error = loss.detach().numpy()
     
-    
-
-    
-    
     if not only_forward:
         if input.grad is not None:
             input.grad.zero_()
@@ -252,9 +245,9 @@ def server_compute(Hidden, target, only_forward = False):
 
 def server_validate(test_in, test_out):
     # multiple_batch
-    input = torch.tensor(test_in, requires_grad=True).float()
+    input = torch.tensor(test_in).float()
     
-    label = torch.from_numpy(test_out).view(input.size(0), ).long()
+    label = torch.from_numpy(test_out).view(input.size(0),).long()
 
     s_model.eval()
 
@@ -269,9 +262,6 @@ def server_validate(test_in, test_out):
     error = loss.detach().numpy() / input.size(0)
 
     accu = (torch.argmax(output, dim = 1) == label).sum() / input.size(0)
-
-    print(torch.argmax(output, dim = 1))
-    print(label)
 
     accu = accu.detach().numpy()
 
@@ -450,7 +440,7 @@ def getSamplesIID(batch_size, batch_start_index):
 
     start = batch_start_index
     end = batch_start_index + batch_size
-
+    
     input_list = []
     label_list = []
 
@@ -476,7 +466,68 @@ def getSamplesIID(batch_size, batch_start_index):
         input_list_array = np.concatenate(input_list, axis = 0)
         label_list_array = np.array(label_list).reshape(-1, 1)
     return input_list_array, label_list_array
-                
+
+
+def getSamplesIIDDigits(batch_size, batch_start_index):
+    global digits_silence_files, digits_one_files, digits_two_files, digits_three_files, digits_four_files, digits_five_files, digits_unknown_files
+
+    # each_sample_amt = int(batch_size/2)
+
+    start = batch_start_index
+    end = batch_start_index + batch_size
+    real_start = start // 7
+    real_end = (end - start) // 7 + start // 7
+    
+    input_list = []
+    label_list = []
+
+    for i in range(real_start, real_end):
+        
+        filename = digits_silence_files[i]
+        num_button = 1
+        input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        input_list.append(input_array)
+        label_list.append(num_button - 1) # need to minus oen to act as label.
+        
+        filename = digits_one_files[i]
+        num_button = 2
+        input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        input_list.append(input_array)
+        label_list.append(num_button - 1) # need to minus oen to act as label.
+
+        filename = digits_two_files[i]
+        num_button = 3
+        input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        input_list.append(input_array)
+        label_list.append(num_button - 1) # need to minus oen to act as label.
+
+        filename = digits_three_files[i]
+        num_button = 4
+        input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        input_list.append(input_array)
+        label_list.append(num_button - 1) # need to minus oen to act as label.
+
+        filename = digits_four_files[i]
+        num_button = 5
+        input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        input_list.append(input_array)
+        label_list.append(num_button - 1) # need to minus oen to act as label.
+
+        filename = digits_five_files[i]
+        num_button = 6
+        input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        input_list.append(input_array)
+        label_list.append(num_button - 1) # need to minus oen to act as label.
+
+        filename = digits_unknown_files[i]
+        num_button = 7
+        input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        input_list.append(input_array)
+        label_list.append(num_button - 1) # need to minus oen to act as label.
+
+    input_list_array = np.concatenate(input_list, axis = 0)
+    label_list_array = np.array(label_list).reshape(-1, 1)
+    return input_list_array, label_list_array
 
 
 def sendSamplesNonIID(device, deviceIndex, batch_size, batch_index):
@@ -526,22 +577,17 @@ def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False
         sample_received_confirm = device.readline().decode()
         
 
-        #Receive input from client
+        #Receive input from client (uncomment corresponding part (line 141) in main.ino)
         # input_list = []
         # for _ in range(50):
         #     inputs = device.readline().decode()
         #     inputs_converted = convert_string_to_array(inputs)
         #     input_list.append(inputs_converted)
         # input_array = np.concatenate(input_list, axis = 0).reshape(1,650)
-        # print(f"test_input: ", input_array)
 
-        # if num_button == 1:
-        #     np.save("processed_datasets/mountains/montserrat_{}".format(samplePath.split("/")[-1].split(".")[1]), input_array)
-        # elif num_button == 2:
-        #     np.save("processed_datasets/mountains/pedraforca_{}".format(samplePath.split("/")[-1].split(".")[1]), input_array)
-
-        # test_output = c_model(torch.tensor(input_array).float())
-        # print(f"test_Outputs: ", test_output)
+        # if not os.path.isdir("processed_datasets/{}".format(experiment)):
+        #     os.makedirs("processed_datasets/{}".format(experiment))
+        # np.save("processed_datasets/{}/{}.npy".format(experiment, samplePath.split("/")[-1].replace(".json", "")), input_array)
 
         # Receive activation from client
         outputs = device.readline().decode()
@@ -789,16 +835,13 @@ def startFL():
         output_layer = np.average(devices_output_layer, axis=0, weights=devices_num_epochs)
 
     # Doing validation
-    # c_model.load_state_dict({'client.0.weight': torch.tensor(hidden_layer[:size_hidden_nodes*650]).view(650, size_hidden_nodes).t().float(), 'client.0.bias': torch.tensor(hidden_layer[size_hidden_nodes*650:]).float()})
+    c_model.load_state_dict({'client.0.weight': torch.tensor(hidden_layer[:size_hidden_nodes*650]).view(650, size_hidden_nodes).t().float(), 'client.0.bias': torch.tensor(hidden_layer[size_hidden_nodes*650:]).float()})
     
-    # test_in, test_out = getSamplesIID(50, 200)
+    test_in, test_out = getSamplesIIDDigits(35, 315)
 
-    # error, accu = server_validate(test_in, test_out)
-    # print("======Testing Start======")
-    # print(f"==Error {error}==")
-    # print(f"==Accuracy {accu}==")
-    # val_graph.append([error, accu, 0])
-    # print("======Testing End======")
+    error, accu = server_validate(test_in, test_out)
+    logger.debug(f"Validation Accuracy {100 * accu}%\n")
+    val_graph.append([error, accu, 0])
 
     #################
     # Sending models
@@ -884,7 +927,7 @@ for epoch in range(epoch_size):
             threads.append(thread)
         for thread in threads: thread.join() # Wait for all the threads to end
         
-        logger.debug("Training Accuracy is {}.".format(running_batch_accu/batch_size))
+        logger.debug("Training Accuracy is {}%".format(100 * running_batch_accu/batch_size))
         
         startFL()
         
@@ -927,20 +970,20 @@ figname = f"newplots/ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-
 plt.savefig(figname, format='eps')
 logger.debug(f"Generated {figname}")
 
-# plt.figure(2)
-# plt.ion()
-# plt.show()
-# plt.rc('font', size=font_sm)          # controls default text sizes
-# plt.rc('axes', titlesize=font_sm)     # fontsize of the axes title
-# plt.rc('axes', labelsize=font_md)     # fontsize of the x and y labels
-# plt.rc('xtick', labelsize=font_sm)    # fontsize of the tick labels
-# plt.rc('ytick', labelsize=font_sm)    # fontsize of the tick labels
-# plt.rc('legend', fontsize=font_sm)    # legend fontsize
-# plt.rc('figure', titlesize=font_xl)   # fontsize of the figure title
-# plot_val_graph()
-# figname2 = f"newplots/ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-HN{size_hidden_nodes}-TT{train_time}-{experiment}_val.eps"
-# plt.savefig(figname2, format='eps')
-# print(f"Generated {figname2}")
+plt.figure(2)
+plt.ion()
+plt.show()
+plt.rc('font', size=font_sm)          # controls default text sizes
+plt.rc('axes', titlesize=font_sm)     # fontsize of the axes title
+plt.rc('axes', labelsize=font_md)     # fontsize of the x and y labels
+plt.rc('xtick', labelsize=font_sm)    # fontsize of the tick labels
+plt.rc('ytick', labelsize=font_sm)    # fontsize of the tick labels
+plt.rc('legend', fontsize=font_sm)    # legend fontsize
+plt.rc('figure', titlesize=font_xl)   # fontsize of the figure title
+plot_val_graph()
+figname2 = f"newplots/ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-HN{size_hidden_nodes}-TT{train_time}-{experiment}_val.eps"
+plt.savefig(figname2, format='eps')
+print(f"Generated {figname2}")
 
 plt.figure(3)
 plt.ion()
