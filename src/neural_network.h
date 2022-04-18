@@ -35,7 +35,7 @@ class NeuralNetwork {
         float ChangeHiddenWeights[(InputNodes+1) * HiddenNodes] = {};
 
         float LearningRate = 0.01;
-        float Momentum = 0.9;
+        float Momentum = 0.0;
 };
 
 

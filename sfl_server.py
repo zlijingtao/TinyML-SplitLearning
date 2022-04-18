@@ -35,7 +35,7 @@ if experiment == "custom":
     size_output_nodes = 5
 elif experiment == 'digits':
     size_output_nodes = 7
-    batch_size = 14 # Must be even, hsa to be split into 2 types of samples
+    batch_size = 7 # Must be even, hsa to be split into 2 types of samples
 else:
     size_output_nodes = 3
 size_hidden_layer = (650+1)*size_hidden_nodes
@@ -57,7 +57,7 @@ size_output_layer = (size_hidden_nodes+1)*size_output_nodes # why we need one mo
 output_layer = np.random.uniform(-0.5, 0.5, size_output_layer).astype('float32')
 output_weight_updates  = np.zeros_like(output_layer)
 
-momentum = 0.9
+momentum = 0.0
 learningRate= 0.01
 number_hidden = 0
 hidden_size = 64
@@ -394,37 +394,37 @@ def sendSamplesIIDDigits(device, deviceIndex, batch_size, batch_index):
 
         filename = digits_silence_files[i]
         num_button = 1
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_silence_files)}): Class 0: Silence")
+        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_silence_files)}): Class 0")
         sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
         
         filename = digits_one_files[i]
         num_button = 2
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_one_files)}): Class 1: One")
+        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_one_files)}): Class 1")
         sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
 
         filename = digits_two_files[i]
         num_button = 3
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_two_files)}): Class 2: Two")
+        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_two_files)}): Class 2")
         sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
 
         filename = digits_three_files[i]
         num_button = 4
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_three_files)}): Class 3: Three")
+        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_three_files)}): Class 3")
         sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
 
         filename = digits_four_files[i]
         num_button = 5
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_four_files)}): Class 4: Four")
+        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_four_files)}): Class 4")
         sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
 
         filename = digits_five_files[i]
         num_button = 6
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_five_files)}): Class 5: only")
+        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_five_files)}): Class 5")
         sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
 
         filename = digits_unknown_files[i]
         num_button = 7
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_unknown_files)}): Class 6: Unknown")
+        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_unknown_files)}): Class 6")
         sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
 
 # Batch size: The amount of samples to send

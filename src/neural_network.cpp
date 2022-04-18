@@ -60,10 +60,10 @@ void NeuralNetwork::backward(const float Input[]){
     * Update Inner-->Hidden Weights
     ******************************************************************/
     for(int i = 0 ; i < HiddenNodes ; i++ ) {     
-        ChangeHiddenWeights[InputNodes*HiddenNodes + i] = LearningRate * HiddenDelta[i] + Momentum * ChangeHiddenWeights[InputNodes*HiddenNodes + i] ;
+        ChangeHiddenWeights[InputNodes*HiddenNodes + i] = (1 - Momentum) * LearningRate * HiddenDelta[i] + Momentum * ChangeHiddenWeights[InputNodes*HiddenNodes + i] ;
         HiddenWeights[InputNodes*HiddenNodes + i] -= ChangeHiddenWeights[InputNodes*HiddenNodes + i] ;
         for(int j = 0 ; j < InputNodes ; j++ ) { 
-            ChangeHiddenWeights[j*HiddenNodes + i] = LearningRate * Input[j] * HiddenDelta[i] + Momentum * ChangeHiddenWeights[j*HiddenNodes + i];   // Original
+            ChangeHiddenWeights[j*HiddenNodes + i] = (1 - Momentum) * LearningRate * Input[j] * HiddenDelta[i] + Momentum * ChangeHiddenWeights[j*HiddenNodes + i];   // Original
             HiddenWeights[j*HiddenNodes + i] -= ChangeHiddenWeights[j*HiddenNodes + i] ;
         }
     }

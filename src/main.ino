@@ -304,7 +304,7 @@ void loop() {
         button_pressed = false;
 
     } else {
-        // while(Serial.available() < 1){} // We will not loop the read, but use blocking read
+        while(Serial.available() < 1){} // We will not loop the read, but use blocking read 
         int read = Serial.read(); // loop reading
         if (read == '>') { // s -> FEDERATED LEARNING
             /***********************
@@ -312,7 +312,8 @@ void loop() {
              ***********************/
             Serial.write('<');
             digitalWrite(LED_BUILTIN, HIGH);    // ON
-            delay(1000);
+            delay(1000); // #TODO: Test whether this is more stable.
+            while(Serial.available() < 1) {} //#TODO: Test whether this is more stable.
             if (Serial.read() == 's') {
                 Serial.println("start");
                 Serial.println(num_epochs);
