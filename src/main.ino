@@ -306,18 +306,18 @@ void loop() {
     } else {
         // while(Serial.available() < 1){} // We will not loop the read, but use blocking read 
         int read = Serial.read(); // loop reading
-        if (read == '>') { // s -> FEDERATED LEARNING
+        if (read == 'a') { // s -> FEDERATED LEARNING
             /***********************
              * Federate Learning
              ***********************/
             
-            Serial.write('<');
-            digitalWrite(LED_BUILTIN, HIGH);    // ON
+            Serial.write('y');
+            // digitalWrite(LED_BUILTIN, HIGH);    // ON
             // delay(1000); // #TODO: Test whether this is more stable.
             while(Serial.available() < 1) {} //#TODO: Test whether this is more stable.
             if (Serial.read() == 's') {
                 Serial.println("start");
-                Serial.println(num_epochs);
+                Serial.println(num_epochs, DEC);
                 num_epochs = 0;
 
                 /*******
@@ -360,15 +360,15 @@ void loop() {
                 // Serial.println("Model aggregation done");
             }
 
-            digitalWrite(LED_BUILTIN, LOW);    // OFF
+            // digitalWrite(LED_BUILTIN, LOW);    // OFF
             
         } else if (read == 't') { // Train with a sample
             Serial.println("ok");
 
             while(Serial.available() < 1) {}
-            uint8_t num_button = Serial.read();
-            Serial.println("Button Received"); 
-            // Serial.println(num_button);
+            uint8_t label_send = Serial.read();
+            Serial.print("Label Received "); 
+            Serial.println(label_send);
 
             while(Serial.available() < 1) {}
             bool only_forward = Serial.read() == 1;
@@ -382,9 +382,9 @@ void loop() {
                 inference.buffer[i] = 0;
                 inference.buffer[i] = (ref[1] << 8) | ref[0];
             }
-            // Serial.print("Sample received for button ");
-            Serial.println(num_button);
-            train(num_button, only_forward);
+            Serial.print("Sample received for label ");
+            Serial.println(label_send);
+            train(label_send, only_forward);
             // Serial.println("Perform single sample training");
         } else if (read == 'b'){ // Use a signal to set button
             Serial.println("bt_set");

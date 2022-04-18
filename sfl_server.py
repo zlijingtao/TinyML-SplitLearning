@@ -13,20 +13,46 @@ import random
 import torch
 import torch.nn as nn
 import torch.nn.init as init
+import logging
+import sys
+formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+
+def setup_logger(name, log_file, level=logging.INFO, console_out = True):
+    """To setup as many loggers as you want"""
+
+    handler = logging.FileHandler(log_file, mode='a')
+    handler.setFormatter(formatter)
+
+    logger = logging.getLogger(name)
+    logger.setLevel(level)
+    while logger.hasHandlers():
+        logger.removeHandler(logger.handlers[0])
+    logger.addHandler(handler)
+    if console_out:
+        stdout_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stdout_handler)
+    return logger
+
+
+
 #TODO: compare baseline validation and more layers (or larger model)
 #TODO: try to extinct resources on board. (multi-iamge batch?)
 #TODO: find a way to store some image and pull out them to train.
 #TODO: Use our own image. 
 #TODO: How to make it really useful? Just as the original one, need some button to do the labeling.
 
+model_log_file = "./log.txt"
+logger = setup_logger('main_logger', model_log_file, level=logging.DEBUG)
+
+
 random.seed(4321)
 np.random.seed(4321)
 
+epoch_size = 3 # default = 1
 samples_per_device = 350 # Amount of samples of each word to send to each device
 batch_size = 10 # Must be even, hsa to be split into 2 types of samples
 running_batch_accu = 0
 running_batch_accu_list = []
-# experiment = 'iid' # 'iid', 'no-iid', 'train-test'
 experiment = 'digits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
 
 # initialize client-side model
@@ -39,9 +65,11 @@ elif experiment == 'digits':
 else:
     size_output_nodes = 3
 size_hidden_layer = (650+1)*size_hidden_nodes
-# hidden_layer = np.random.uniform(-0.5,0.5, size_hidden_layer).astype('float32')
-
 hidden_layer = (np.random.normal(size=(size_hidden_layer, )) * np.sqrt(2./650)).astype('float32')
+
+logger.debug("\n")
+logger.debug("\n")
+logger.debug("Training Setting: dataset {}, Total Round {}, data_per_round {}". format(experiment, epoch_size * int(samples_per_device/batch_size), batch_size))
 
 # # We add an extra layer at the server-side model
 # neuron_layer_2nd = 2 * size_hidden_nodes
@@ -61,6 +89,9 @@ momentum = 0.7
 learningRate= 0.01
 number_hidden = 0
 hidden_size = 64
+
+logger.debug("Model Setting: momentum {}, lr {}, number_hidden {}, hidden_size {}". format(momentum, learningRate, number_hidden, hidden_size))
+
 
 def init_weights(m):
     if isinstance(m, nn.Linear):
@@ -113,8 +144,8 @@ class server_model(nn.Module):
 
         self.server = nn.Sequential(*model_list)
 
-        print("server:")
-        print(self.server)
+        logger.debug("server:")
+        logger.debug(str(self.server))
     def forward(self, x):
         out = self.server(x)
         return out
@@ -151,14 +182,13 @@ digits_four_files = [file for file in os.listdir("datasets/CN_digits") if file.s
 digits_five_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("five")]
 digits_unknown_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("unknown")]
 
-digits_silence_test_files = [file for file in os.listdir("datasets/CN_digits_test") if file.startswith("silence")]
-digits_one_test_files = [file for file in os.listdir("datasets/CN_digits_test") if file.startswith("one")]
-digits_two_test_files = [file for file in os.listdir("datasets/CN_digits_test") if file.startswith("two")]
-digits_three_test_files = [file for file in os.listdir("datasets/CN_digits_test") if file.startswith("three")]
-digits_four_test_files = [file for file in os.listdir("datasets/CN_digits_test") if file.startswith("four")]
-digits_five_test_files = [file for file in os.listdir("datasets/CN_digits_test") if file.startswith("five")]
-digits_unknown_test_files = [file for file in os.listdir("datasets/CN_digits_test") if file.startswith("unknown")]
-
+random.shuffle(digits_silence_files)
+random.shuffle(digits_one_files)
+random.shuffle(digits_two_files)
+random.shuffle(digits_three_files)
+random.shuffle(digits_four_files)
+random.shuffle(digits_five_files)
+random.shuffle(digits_unknown_files)
 
 graph = []
 repaint_graph = True
@@ -169,9 +199,6 @@ random.shuffle(montserrat_files)
 random.shuffle(pedraforca_files)
 mountains = list(sum(zip(montserrat_files, pedraforca_files), ()))
 test_mountains = list(sum(zip(test_montserrat_files, test_pedraforca_files), ()))
-# random.shuffle(vermell_files)
-# random.shuffle(verd_files)
-# random.shuffle(blau_files)
 
 
 def convert_string_to_array(string, one_hot = False):
@@ -193,20 +220,10 @@ def server_compute(Hidden, target, only_forward = False):
     s_model.train()
     s_optimizer.zero_grad()
     
-    
     input.retain_grad()
-    # logsoftmax 
     output = s_model(input)
-    # logsoftmax = nn.LogSoftmax(dim = 0)
     criterion = nn.CrossEntropyLoss()
     loss = criterion(output, label)
-    # log_prob = torch.nn.functional.log_softmax(output)
-
-
-
-    # loss = torch.mean(torch.sum(-target * logsoftmax(output))) # use with gradient descent
-    # loss = -torch.mean(torch.sum(target * logsoftmax(output))) # use with gradient ascent
-
 
     error = loss.detach().numpy()
     
@@ -304,7 +321,7 @@ def server_compute_old(Hidden, target, only_forward = False):
 def print_until_keyword(keyword, arduino):
     while True: 
         msg = arduino.readline().decode()
-        print(msg)
+        # logger.debug(msg)
         if msg[:-2] == keyword:
             break
         else:
@@ -319,7 +336,7 @@ def init_network(hidden_layer, output_layer, device, deviceIndex):
     print_until_keyword('start', device)
     # modelReceivedConfirmation = device.readline().decode()
     # print(f"Model received confirmation: ", modelReceivedConfirmation)
-    print(f"Sending model to {device.port}")
+    # print(f"Sending model to {device.port}")
 
     device.write(struct.pack('f', learningRate))
     device.write(struct.pack('f', momentum))
@@ -331,9 +348,9 @@ def init_network(hidden_layer, output_layer, device, deviceIndex):
         data = struct.pack('f', float_num)
         device.write(data)
 
-    print(f"Client-side Model sent to {device.port}")
+    # print(f"Client-side Model sent to {device.port}")
     modelReceivedConfirmation = device.readline().decode()
-    print(f"Model received confirmation: ", modelReceivedConfirmation)
+    # print(f"Model received confirmation: ", modelReceivedConfirmation)
 
 
 def sendSamplesIIDCustom(device, deviceIndex, batch_size, batch_index):
@@ -345,31 +362,27 @@ def sendSamplesIIDCustom(device, deviceIndex, batch_size, batch_index):
     end = (deviceIndex*samples_per_device) + (batch_index * batch_size) + batch_size
     real_start = start // 5
     real_end = (end - start) // 5 + start // 5
-    print(f"[{device.port}] Sending samples from {start} to {end}")
+    # print(f"[{device.port}] Sending samples from {start} to {end}")
     for i in range(real_start, real_end):
         filename = all_files[i]
         num_button = 1
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(all_files)}): Class 1: all")
         sendSample(device, 'datasets/words/all/'+filename, num_button, deviceIndex)
 
         filename = must_files[i]
         num_button = 2
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(must_files)}): Class 2: must")
         sendSample(device, 'datasets/words/must/'+filename, num_button, deviceIndex)
 
         filename = never_files[i]
         num_button = 3
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(never_files)}): Class 3: never")
+
         sendSample(device, 'datasets/words/never/'+filename, num_button, deviceIndex)
 
         filename = none_files[i]
         num_button = 4
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(none_files)}): Class 4: none")
         sendSample(device, 'datasets/words/none/'+filename, num_button, deviceIndex)
 
         filename = only_files[i]
         num_button = 5
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(only_files)}): Class 5: only")
         sendSample(device, 'datasets/words/only/'+filename, num_button, deviceIndex)
 
 
@@ -382,42 +395,33 @@ def sendSamplesIIDDigits(device, deviceIndex, batch_size, batch_index):
     end = (deviceIndex*samples_per_device) + (batch_index * batch_size) + batch_size
     real_start = start // 7
     real_end = (end - start) // 7 + start // 7
-    print(f"[{device.port}] Sending samples from {start} to {end}")
     for i in range(real_start, real_end):
-
         filename = digits_silence_files[i]
         num_button = 1
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_silence_files)}): Button {num_button}")
         sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
         
         filename = digits_one_files[i]
         num_button = 2
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_one_files)}): Button {num_button}")
         sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
 
         filename = digits_two_files[i]
         num_button = 3
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_two_files)}): Button {num_button}")
         sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
 
         filename = digits_three_files[i]
         num_button = 4
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_three_files)}): Button {num_button}")
         sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
 
         filename = digits_four_files[i]
         num_button = 5
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_four_files)}): Button {num_button}")
         sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
 
         filename = digits_five_files[i]
         num_button = 6
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_five_files)}): Button {num_button}")
         sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
 
         filename = digits_unknown_files[i]
         num_button = 7
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_unknown_files)}): Button {num_button}")
         sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
 
 # Batch size: The amount of samples to send
@@ -429,8 +433,6 @@ def sendSamplesIID(device, deviceIndex, batch_size, batch_index):
     start = (deviceIndex*samples_per_device) + (batch_index * batch_size)
     end = (deviceIndex*samples_per_device) + (batch_index * batch_size) + batch_size
 
-    print(f"[{device.port}] Sending samples from {start} to {end}")
-
     files = mountains[start:end]
     for i, filename in enumerate(files):
         if (filename.startswith("montserrat")):
@@ -439,7 +441,6 @@ def sendSamplesIID(device, deviceIndex, batch_size, batch_index):
             num_button = 2
         else:
             exit("Unknown button for sample")
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(files)}): Button {num_button}")
         sendSample(device, 'datasets/mountains/'+filename, num_button, deviceIndex)
 
 def getSamplesIID(batch_size, batch_start_index):
@@ -501,7 +502,6 @@ def sendSamplesNonIID(device, deviceIndex, batch_size, batch_index):
         exit("Exceeded device index")
 
     for i, filename in enumerate(files):
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(files)}): Button {num_button}")
         sendSample(device, f"datasets/{dir}/{filename}", num_button, deviceIndex)
 
 def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False):
@@ -510,21 +510,20 @@ def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False
         data = json.load(f)
         device.write(b't')
         startConfirmation = device.readline().decode()
-        print(f"[{device.port}] Train start confirmation:", startConfirmation)
 
         device.write(struct.pack('B', num_button))
-        print(device.readline().decode()) # Button confirmation
+        button_confirm = device.readline().decode()
 
         device.write(struct.pack('B', 1 if only_forward else 0))
-        print(f"Only forward confirmation: {device.readline().decode()}") # Button confirmation
-        
+        only_forward_confirm = device.readline().decode()
+
         if 'payload' in data:
             for i, value in enumerate(data['payload']['values']):
                 device.write(struct.pack('h', value))
         else:
             for i, value in enumerate(data['values']):
                 device.write(struct.pack('h', value))
-        print(f"[{device.port}] Sample received confirmation:", device.readline().decode())
+        sample_received_confirm = device.readline().decode()
         
 
         #Receive input from client
@@ -544,7 +543,6 @@ def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False
         # test_output = c_model(torch.tensor(input_array).float())
         # print(f"test_Outputs: ", test_output)
 
-
         # Receive activation from client
         outputs = device.readline().decode()
 
@@ -552,18 +550,14 @@ def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False
             # Perform server-side computation (forward)
             hidden_activation = convert_string_to_array(outputs)
             label = convert_string_to_array(str(num_button), one_hot = True)
-            print(f"Outputs: ", hidden_activation)
-            print(f"label: ", num_button)
             forward_accu, forward_error = server_compute(hidden_activation, label, only_forward= True)
         else:
             # Receive label from client
             nb = device.readline()[:-2]
-            # print(str(nb))
+
             # Perform server-side computation (forward/backward)
             hidden_activation = convert_string_to_array(outputs)
             label = convert_string_to_array(str(nb), one_hot = True)
-            print(f"Outputs: ", hidden_activation)
-            print(f"label: ", label)
             forward_accu, forward_error, error_array = server_compute(hidden_activation, label, only_forward= False)
             
             # Send Error Array to client to continue backward #TODO: implement this
@@ -573,14 +567,6 @@ def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False
                 data = struct.pack('f', float_num)
                 d.write(data)
 
-            # sendmodel_confirmation = d.readline().decoder()
-            # print(f'Model sent confirmation: {sendmodel_confirmation}')
-            
-            # if (forward_error > 0.28):
-            #     print(f"[{device.port}] Sample {samplePath} generated an error of {forward_error}")
-
-        # print(f"Fordward millis received: ", device.readline().decode())
-        # print(f"Backward millis received: ", device.readline().decode())
         device.readline().decode() # Accept 'Done' command
 
         ne = device.readline()[:-2]
@@ -588,12 +574,9 @@ def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False
         n_epooch = int(ne)
         running_batch_accu += forward_accu
         graph.append([n_epooch, forward_error, deviceIndex])
-        print(f"Error: ", forward_error)
 
 def sendTestSamples(device, deviceIndex):
     global test_mountains
-
-    print(f"[{device.port}] Sending test samples from {0} to {60}")
 
     start = deviceIndex*40
     end = (deviceIndex*40) + 40
@@ -606,30 +589,7 @@ def sendTestSamples(device, deviceIndex):
             num_button = 2
         else:
             exit("Unknown button for sample")
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(files)}): Button {num_button}")
         sendSample(device, 'datasets/mountains/'+filename, num_button, deviceIndex, True)
-
-
-
-
-# def read_graph(device, deviceIndex):
-#     global repaint_graph
-
-#     outputs = device.readline().decode()
-#     print(f"Outputs: ", outputs)
-
-#     error = device.readline().decode()
-#     print(f"Error: ", error)
-
-#     ne = device.readline()[:-2]
-#     n_epooch = int(ne)
-
-#     n_error = device.read(4)
-#     [n_error] = struct.unpack('f', n_error)
-#     nb = device.readline()[:-2]
-#     graph.append([n_epooch, n_error, deviceIndex])
-#     repaint_graph = True
-#     return n_error
 
 def read_number(msg):
     while True:
@@ -750,40 +710,30 @@ def getDevices():
 
 def FlGetModel(d, device_index, devices_hidden_layer, devices_output_layer, devices_num_epochs, old_devices_connected):
     global size_hidden_layer, size_output_layer
-    d.reset_input_buffer()
-    d.reset_output_buffer()
+    # d.reset_input_buffer()
+    # d.reset_output_buffer()
     d.timeout = 5
 
-    print(f'Starting connection to {d.port} ...') # Hanshake
-    d.write(b'>') # Python --> SYN --> Arduino
+    # print(f'Starting connection to {d.port} ...') # Hanshake
+    d.write(b'a') # Python --> SYN --> Arduino
     
-    if d.read() == b'<': # Python <-- SYN ACK <-- Arduino
+    if d.read() == b'y': # Python <-- SYN ACK <-- Arduino
 
         d.write(b's') # Python --> ACK --> Arduino
         
-        print('Connection accepted.')
         devices_connected.append(d)
-        #devices_hidden_layer = np.vstack((devices_hidden_layer, np.empty(size_hidden_layer)))
-        #devices_output_layer = np.vstack((devices_output_layer, np.empty(size_output_layer)))
+        
         d.timeout = None
 
         print_until_keyword('start', d)
         devices_num_epochs.append(int(d.readline()[:-2]))
 
-        print(f'Receiving model from {d.port} ...')
         ini_time = time.time()
 
         for i in range(size_hidden_layer): # hidden layer
             data = d.read(4)
             [float_num] = struct.unpack('f', data)
             devices_hidden_layer[device_index][i] = float_num
-
-        # for i in range(size_output_layer): # output layer
-        #     data = d.read(4)
-        #     [float_num] = struct.unpack('f', data)
-        #     devices_output_layer[device_index][i] = float_num
-
-        print(f'Model received from {d.port} ({time.time()-ini_time} seconds)')
 
         # if it was not connected before, we dont use the devices' model
         if not d in old_devices_connected:
@@ -794,36 +744,25 @@ def FlGetModel(d, device_index, devices_hidden_layer, devices_output_layer, devi
         print(f'Connection timed out. Skipping {d.port}.')
 
 def sendModel(d, hidden_layer, output_layer):
-    ini_time = time.time()
     for i in range(size_hidden_layer): # hidden layer
         d.read() # wait until confirmatio
         float_num = hidden_layer[i]
         data = struct.pack('f', float_num)
         d.write(data)
 
-    # for i in range(size_output_layer): # output layer
-    #     d.read() # wait until confirmatio
-    #     float_num = output_layer[i]
-    #     data = struct.pack('f', float_num)
-    #     d.write(data)
-
-    # sendmodel_confirmation = d.readline().decoder()
-    # print(f'Model sent confirmation: {sendmodel_confirmation}')
-    print(f'Model sent to {d.port} ({time.time()-ini_time} seconds)')
 
 def startFL():
     global devices_connected, hidden_layer, output_layer, pauseListen
 
     pauseListen = True
 
-    print('Starting Federated Learning')
+    print('Model Aggregation...')
     old_devices_connected = devices_connected
     devices_connected = []
     devices_hidden_layer = np.empty((len(devices), size_hidden_layer), dtype='float32')
     devices_output_layer = np.empty((len(devices), size_output_layer), dtype='float32')
     devices_num_epochs = []
-    print("Devices:")
-    print(devices)
+    
     ##################
     # Receiving models
     ##################
@@ -848,7 +787,6 @@ def startFL():
         ini_time = time.time() * 1000
         hidden_layer = np.average(devices_hidden_layer, axis=0, weights=devices_num_epochs)
         output_layer = np.average(devices_output_layer, axis=0, weights=devices_num_epochs)
-        print(f'Average millis: {(time.time()*1000)-ini_time} milliseconds)')
 
     # Doing validation
     # c_model.load_state_dict({'client.0.weight': torch.tensor(hidden_layer[:size_hidden_nodes*650]).view(650, size_hidden_nodes).t().float(), 'client.0.bias': torch.tensor(hidden_layer[size_hidden_nodes*650:]).float()})
@@ -867,8 +805,6 @@ def startFL():
     #################
     threads = []
     for d in devices_connected:
-        print(f'Sending model to {d.port} ...')
-
         thread = threading.Thread(target=sendModel, args=(d, hidden_layer, output_layer))
         thread.daemon = True
         thread.start()
@@ -894,7 +830,6 @@ print("Available ports:")
 for available_port in available_ports:
     print(available_port)
 
-
 try:
     print("Access default port")
     devices = [serial.Serial('/dev/ttyACM0', 9600)]
@@ -903,11 +838,6 @@ except:
     devices = [serial.Serial('/dev/ttyACM1', 9600)]
 devices_connected = devices
 
-
-
-# To load a Pre-trained model
-# hidden_layer = np.load("./hidden_montserrat.npy")
-# output_layer = np.load("./output_montserrat.npy")
 
 
 
@@ -934,11 +864,11 @@ ini_time = time.time()
 
 
 # Train the device
-epoch_size = 3 # default = 1
-for _ in range(epoch_size):
-    
-    for batch in range(int(samples_per_device/batch_size)):
+for epoch in range(epoch_size):
+    total_round = int(samples_per_device/batch_size)
+    for batch in range(total_round):
         running_batch_accu = 0
+        logger.debug("Epoch {}/{}, Round {}/{} (data per round: {})".format(epoch, epoch_size, batch, total_round, batch_size))
         for deviceIndex, device in enumerate(devices):
             if experiment == 'iid' or experiment == 'train-test':
                 thread = threading.Thread(target=sendSamplesIID, args=(device, deviceIndex, batch_size, batch))
@@ -953,12 +883,14 @@ for _ in range(epoch_size):
             thread.start()
             threads.append(thread)
         for thread in threads: thread.join() # Wait for all the threads to end
+        
+        logger.debug("Training Accuracy is {}.".format(running_batch_accu/batch_size))
+        
         startFL()
-        print("This round accuracy is {}.".format(running_batch_accu/batch_size))
+        
         running_batch_accu_list.append(running_batch_accu/batch_size)
     
 train_time = time.time()-ini_time
-# print(f'Trained in ({train_time} seconds)')
 
 if experiment == 'train-test':
     for deviceIndex, device in enumerate(devices):
@@ -977,7 +909,6 @@ for i, d in enumerate(devices):
 
 plt.figure(1)
 plt.ion()
-# plt.title(f"Loss vs Epoch")
 plt.show()
 
 font_sm = 13
@@ -994,7 +925,7 @@ plt.rc('figure', titlesize=font_xl)   # fontsize of the figure title
 plot_graph()
 figname = f"newplots/ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-HN{size_hidden_nodes}-TT{train_time}-{experiment}_train.eps"
 plt.savefig(figname, format='eps')
-print(f"Generated {figname}")
+logger.debug(f"Generated {figname}")
 
 # plt.figure(2)
 # plt.ion()
@@ -1024,4 +955,6 @@ plt.rc('figure', titlesize=font_xl)   # fontsize of the figure title
 plot_train_accu()
 figname3 = f"newplots/ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-HN{size_hidden_nodes}-TT{train_time}-{experiment}_train_accu.eps"
 plt.savefig(figname3, format='eps')
-print(f"Generated {figname3}")
+logger.debug(f"Generated {figname3}")
+
+

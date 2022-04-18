@@ -1,0 +1,13 @@
+2022-04-17 22:29:13,789 DEBUG 
+
+2022-04-17 22:29:13,789 DEBUG 
+
+2022-04-17 22:29:13,789 DEBUG Training Setting: dataset digits, Total Round 75, data_per_round 14
+2022-04-17 22:29:13,789 DEBUG Model Setting: momentum 0.7, lr 0.01, number_hidden 0, hidden_size 64
+2022-04-17 22:29:13,790 DEBUG server:
+2022-04-17 22:29:13,790 DEBUG Sequential(
+  (0): Linear(in_features=25, out_features=7, bias=True)
+)
+2022-04-17 22:29:20,541 DEBUG Epoch 0/3, Round 0/25 (data per round: 14)
+2022-04-17 22:29:55,550 DEBUG Training Accuracy is 0.14285714285714285.
+2022-04-17 22:30:00,773 DEBUG Epoch 0/3, Round 1/25 (data per round: 14)
