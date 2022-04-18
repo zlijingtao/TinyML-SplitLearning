@@ -304,15 +304,16 @@ void loop() {
         button_pressed = false;
 
     } else {
-        while(Serial.available() < 1){} // We will not loop the read, but use blocking read 
+        // while(Serial.available() < 1){} // We will not loop the read, but use blocking read 
         int read = Serial.read(); // loop reading
         if (read == '>') { // s -> FEDERATED LEARNING
             /***********************
              * Federate Learning
              ***********************/
+            
             Serial.write('<');
             digitalWrite(LED_BUILTIN, HIGH);    // ON
-            delay(1000); // #TODO: Test whether this is more stable.
+            // delay(1000); // #TODO: Test whether this is more stable.
             while(Serial.available() < 1) {} //#TODO: Test whether this is more stable.
             if (Serial.read() == 's') {
                 Serial.println("start");
@@ -366,11 +367,13 @@ void loop() {
 
             while(Serial.available() < 1) {}
             uint8_t num_button = Serial.read();
-            Serial.print("Button "); Serial.println(num_button);
+            Serial.println("Button Received"); 
+            // Serial.println(num_button);
 
             while(Serial.available() < 1) {}
             bool only_forward = Serial.read() == 1;
-            Serial.print("Only forward "); Serial.println(only_forward);
+            // Serial.print("Only forward "); 
+            Serial.println(only_forward);
             
             byte ref[2];
             for(int i = 0; i < EI_CLASSIFIER_RAW_SAMPLE_COUNT; i++) {
@@ -379,7 +382,7 @@ void loop() {
                 inference.buffer[i] = 0;
                 inference.buffer[i] = (ref[1] << 8) | ref[0];
             }
-            Serial.print("Sample received for button ");
+            // Serial.print("Sample received for button ");
             Serial.println(num_button);
             train(num_button, only_forward);
             // Serial.println("Perform single sample training");

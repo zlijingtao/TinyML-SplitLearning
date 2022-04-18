@@ -35,7 +35,7 @@ if experiment == "custom":
     size_output_nodes = 5
 elif experiment == 'digits':
     size_output_nodes = 7
-    batch_size = 7 # Must be even, hsa to be split into 2 types of samples
+    batch_size = 14 # Must be even, hsa to be split into 2 types of samples
 else:
     size_output_nodes = 3
 size_hidden_layer = (650+1)*size_hidden_nodes
@@ -57,7 +57,7 @@ size_output_layer = (size_hidden_nodes+1)*size_output_nodes # why we need one mo
 output_layer = np.random.uniform(-0.5, 0.5, size_output_layer).astype('float32')
 output_weight_updates  = np.zeros_like(output_layer)
 
-momentum = 0.0
+momentum = 0.7
 learningRate= 0.01
 number_hidden = 0
 hidden_size = 64
@@ -188,11 +188,8 @@ def convert_string_to_array(string, one_hot = False):
 
 
 def server_compute(Hidden, target, only_forward = False):
-    input = torch.tensor(Hidden, requires_grad=True).float().cuda()
-    label = torch.argmax(torch.from_numpy(target).float()).cuda()
-    # target = torch.from_numpy(target).float().cuda()
-    # print(target)
-    s_model.cuda()
+    input = torch.tensor(Hidden, requires_grad=True).float()
+    label = torch.argmax(torch.from_numpy(target).float())
     s_model.train()
     s_optimizer.zero_grad()
     
@@ -211,7 +208,7 @@ def server_compute(Hidden, target, only_forward = False):
     # loss = -torch.mean(torch.sum(target * logsoftmax(output))) # use with gradient ascent
 
 
-    error = loss.detach().cpu().numpy()
+    error = loss.detach().numpy()
     
     
 
@@ -222,29 +219,25 @@ def server_compute(Hidden, target, only_forward = False):
             input.grad.zero_()
         loss.backward(retain_graph = True)
 
-        error_array = input.grad.detach().cpu().numpy().astype('float32') # get gradient, the -1 is important, since updates are added to the weights in cpp.
+        error_array = input.grad.detach().numpy().astype('float32') # get gradient, the -1 is important, since updates are added to the weights in cpp.
 
         s_optimizer.step()
-        # print("logits:", output.detach().cpu().numpy())
+        # print("logits:", output.detach().numpy())
         # print("error_array:", error_array)
         accu = torch.argmax(output) == label
-        accu = accu.detach().cpu().numpy()
+        accu = accu.detach().numpy()
         return accu, error, error_array
     else:
         accu = torch.argmax(output) == label
-        accu = accu.detach().cpu().numpy()
+        accu = accu.detach().numpy()
         return accu, error
 
 
 def server_validate(test_in, test_out):
     # multiple_batch
-    input = torch.tensor(test_in, requires_grad=True).float().cuda()
+    input = torch.tensor(test_in, requires_grad=True).float()
     
-    label = torch.from_numpy(test_out).view(input.size(0), ).long().cuda()
-
-    c_model.cuda()
-
-    s_model.cuda()
+    label = torch.from_numpy(test_out).view(input.size(0), ).long()
 
     s_model.eval()
 
@@ -256,14 +249,14 @@ def server_validate(test_in, test_out):
 
     loss = criterion(output, label)
 
-    error = loss.detach().cpu().numpy() / input.size(0)
+    error = loss.detach().numpy() / input.size(0)
 
     accu = (torch.argmax(output, dim = 1) == label).sum() / input.size(0)
 
     print(torch.argmax(output, dim = 1))
     print(label)
 
-    accu = accu.detach().cpu().numpy()
+    accu = accu.detach().numpy()
 
     return error, accu
 
@@ -394,37 +387,37 @@ def sendSamplesIIDDigits(device, deviceIndex, batch_size, batch_index):
 
         filename = digits_silence_files[i]
         num_button = 1
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_silence_files)}): Class 0")
+        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_silence_files)}): Button {num_button}")
         sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
         
         filename = digits_one_files[i]
         num_button = 2
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_one_files)}): Class 1")
+        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_one_files)}): Button {num_button}")
         sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
 
         filename = digits_two_files[i]
         num_button = 3
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_two_files)}): Class 2")
+        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_two_files)}): Button {num_button}")
         sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
 
         filename = digits_three_files[i]
         num_button = 4
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_three_files)}): Class 3")
+        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_three_files)}): Button {num_button}")
         sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
 
         filename = digits_four_files[i]
         num_button = 5
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_four_files)}): Class 4")
+        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_four_files)}): Button {num_button}")
         sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
 
         filename = digits_five_files[i]
         num_button = 6
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_five_files)}): Class 5")
+        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_five_files)}): Button {num_button}")
         sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
 
         filename = digits_unknown_files[i]
         num_button = 7
-        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_unknown_files)}): Class 6")
+        print(f"[{device.port}] Sending sample {filename} ({i}/{len(digits_unknown_files)}): Button {num_button}")
         sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
 
 # Batch size: The amount of samples to send
@@ -763,7 +756,9 @@ def FlGetModel(d, device_index, devices_hidden_layer, devices_output_layer, devi
 
     print(f'Starting connection to {d.port} ...') # Hanshake
     d.write(b'>') # Python --> SYN --> Arduino
+    
     if d.read() == b'<': # Python <-- SYN ACK <-- Arduino
+
         d.write(b's') # Python --> ACK --> Arduino
         
         print('Connection accepted.')
@@ -827,7 +822,8 @@ def startFL():
     devices_hidden_layer = np.empty((len(devices), size_hidden_layer), dtype='float32')
     devices_output_layer = np.empty((len(devices), size_output_layer), dtype='float32')
     devices_num_epochs = []
-
+    print("Devices:")
+    print(devices)
     ##################
     # Receiving models
     ##################
