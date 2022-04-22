@@ -204,3 +204,174 @@
 2022-04-17 23:54:59,866 DEBUG Validation Accuracy 88.57142925262451%
 2022-04-17 23:55:05,955 DEBUG Generated newplots/ES3-BS14-LR0.01-M0.7-NH0-HS64-HN25-TT2649.126925945282-digits_train.eps
 2022-04-17 23:55:09,937 DEBUG Generated newplots/ES3-BS14-LR0.01-M0.7-NH0-HS64-HN25-TT2649.126925945282-digits_train_accu.eps
+2022-04-21 19:26:37,562 DEBUG 
+Training Setting: dataset digits, Total Round 22, data_per_round 14
+2022-04-21 19:26:37,562 DEBUG Model Setting: momentum 0.7, lr 0.01, number_hidden 0, hidden_size 64
+2022-04-21 19:26:37,570 DEBUG server:
+2022-04-21 19:26:37,570 DEBUG Sequential(
+  (0): Linear(in_features=25, out_features=7, bias=True)
+)
+2022-04-21 19:26:44,199 DEBUG Epoch 0/1, Round 0/22 (data per round: 14)
+2022-04-21 19:27:22,469 DEBUG Training Accuracy is 0.0%
+2022-04-21 19:42:01,862 DEBUG 
+Training Setting: dataset digits, Total Round 22, data_per_round 14
+2022-04-21 19:42:01,862 DEBUG Model Setting: momentum 0.7, lr 0.01, number_hidden 0, hidden_size 64
+2022-04-21 19:42:01,862 DEBUG server:
+2022-04-21 19:42:01,862 DEBUG Sequential(
+  (0): Linear(in_features=25, out_features=7, bias=True)
+)
+2022-04-21 19:42:08,660 DEBUG Epoch 0/1, Round 0/22 (data per round: 14)
+2022-04-21 19:42:46,550 DEBUG Training Accuracy is 14.285714285714286%
+2022-04-21 19:42:51,871 DEBUG Epoch 0/1, Round 1/22 (data per round: 14)
+2022-04-21 19:43:30,191 DEBUG Training Accuracy is 7.142857142857143%
+2022-04-21 19:43:35,546 DEBUG Epoch 0/1, Round 2/22 (data per round: 14)
+2022-04-21 19:44:13,703 DEBUG Training Accuracy is 28.571428571428573%
+2022-04-21 19:44:19,063 DEBUG Epoch 0/1, Round 3/22 (data per round: 14)
+2022-04-21 19:44:57,078 DEBUG Training Accuracy is 21.428571428571427%
+2022-04-21 19:45:02,445 DEBUG Epoch 0/1, Round 4/22 (data per round: 14)
+2022-04-21 19:45:40,501 DEBUG Training Accuracy is 21.428571428571427%
+2022-04-21 19:45:45,854 DEBUG Epoch 0/1, Round 5/22 (data per round: 14)
+2022-04-21 19:46:23,764 DEBUG Training Accuracy is 21.428571428571427%
+2022-04-21 19:46:29,111 DEBUG Epoch 0/1, Round 6/22 (data per round: 14)
+2022-04-21 19:47:07,008 DEBUG Training Accuracy is 14.285714285714286%
+2022-04-21 19:47:12,313 DEBUG Epoch 0/1, Round 7/22 (data per round: 14)
+2022-04-21 19:47:50,256 DEBUG Training Accuracy is 21.428571428571427%
+2022-04-21 19:47:55,569 DEBUG Epoch 0/1, Round 8/22 (data per round: 14)
+2022-04-21 19:48:33,448 DEBUG Training Accuracy is 28.571428571428573%
+2022-04-21 19:48:38,804 DEBUG Epoch 0/1, Round 9/22 (data per round: 14)
+2022-04-21 19:49:16,748 DEBUG Training Accuracy is 35.714285714285715%
+2022-04-21 19:49:22,115 DEBUG Epoch 0/1, Round 10/22 (data per round: 14)
+2022-04-21 19:50:00,066 DEBUG Training Accuracy is 50.0%
+2022-04-21 19:50:05,405 DEBUG Epoch 0/1, Round 11/22 (data per round: 14)
+2022-04-21 19:50:43,253 DEBUG Training Accuracy is 42.857142857142854%
+2022-04-21 19:50:48,519 DEBUG Epoch 0/1, Round 12/22 (data per round: 14)
+2022-04-21 19:51:26,472 DEBUG Training Accuracy is 42.857142857142854%
+2022-04-21 19:51:31,869 DEBUG Epoch 0/1, Round 13/22 (data per round: 14)
+2022-04-21 19:52:09,837 DEBUG Training Accuracy is 21.428571428571427%
+2022-04-21 19:52:15,198 DEBUG Epoch 0/1, Round 14/22 (data per round: 14)
+2022-04-21 19:52:53,159 DEBUG Training Accuracy is 21.428571428571427%
+2022-04-21 19:52:58,520 DEBUG Epoch 0/1, Round 15/22 (data per round: 14)
+2022-04-21 19:53:36,423 DEBUG Training Accuracy is 42.857142857142854%
+2022-04-21 19:53:41,814 DEBUG Epoch 0/1, Round 16/22 (data per round: 14)
+2022-04-21 19:54:12,182 DEBUG 
+Training Setting: dataset digits, Total Round 50, data_per_round 14
+2022-04-21 19:54:12,182 DEBUG Model Setting: momentum 0.7, lr 0.01, number_hidden 0, hidden_size 64
+2022-04-21 19:54:12,182 DEBUG server:
+2022-04-21 19:54:12,183 DEBUG Sequential(
+  (0): Linear(in_features=25, out_features=7, bias=True)
+)
+2022-04-21 19:54:18,497 DEBUG Epoch 0/1, Round 0/50 (data per round: 14)
+2022-04-21 19:54:56,364 DEBUG Training Accuracy is 7.142857142857143%
+2022-04-21 19:55:01,800 DEBUG Epoch 0/1, Round 1/50 (data per round: 14)
+2022-04-21 19:55:39,695 DEBUG Training Accuracy is 35.714285714285715%
+2022-04-21 19:55:45,029 DEBUG Epoch 0/1, Round 2/50 (data per round: 14)
+2022-04-21 19:56:22,862 DEBUG Training Accuracy is 50.0%
+2022-04-21 19:56:28,226 DEBUG Epoch 0/1, Round 3/50 (data per round: 14)
+2022-04-21 19:57:06,070 DEBUG Training Accuracy is 21.428571428571427%
+2022-04-21 19:57:11,429 DEBUG Epoch 0/1, Round 4/50 (data per round: 14)
+2022-04-21 19:57:49,272 DEBUG Training Accuracy is 28.571428571428573%
+2022-04-21 19:57:54,563 DEBUG Epoch 0/1, Round 5/50 (data per round: 14)
+2022-04-21 19:58:32,451 DEBUG Training Accuracy is 21.428571428571427%
+2022-04-21 19:58:37,733 DEBUG Epoch 0/1, Round 6/50 (data per round: 14)
+2022-04-21 19:59:15,602 DEBUG Training Accuracy is 21.428571428571427%
+2022-04-21 19:59:20,968 DEBUG Epoch 0/1, Round 7/50 (data per round: 14)
+2022-04-21 19:59:58,831 DEBUG Training Accuracy is 42.857142857142854%
+2022-04-21 20:00:04,172 DEBUG Epoch 0/1, Round 8/50 (data per round: 14)
+2022-04-21 20:00:42,022 DEBUG Training Accuracy is 42.857142857142854%
+2022-04-21 20:00:47,373 DEBUG Epoch 0/1, Round 9/50 (data per round: 14)
+2022-04-21 20:01:25,236 DEBUG Training Accuracy is 14.285714285714286%
+2022-04-21 20:01:30,632 DEBUG Epoch 0/1, Round 10/50 (data per round: 14)
+2022-04-21 20:02:08,484 DEBUG Training Accuracy is 50.0%
+2022-04-21 20:02:13,840 DEBUG Epoch 0/1, Round 11/50 (data per round: 14)
+2022-04-21 20:02:51,715 DEBUG Training Accuracy is 28.571428571428573%
+2022-04-21 20:02:57,067 DEBUG Epoch 0/1, Round 12/50 (data per round: 14)
+2022-04-21 20:03:34,950 DEBUG Training Accuracy is 21.428571428571427%
+2022-04-21 20:03:40,234 DEBUG Epoch 0/1, Round 13/50 (data per round: 14)
+2022-04-21 20:04:18,117 DEBUG Training Accuracy is 35.714285714285715%
+2022-04-21 20:04:23,525 DEBUG Epoch 0/1, Round 14/50 (data per round: 14)
+2022-04-21 20:05:01,411 DEBUG Training Accuracy is 35.714285714285715%
+2022-04-21 20:05:06,725 DEBUG Epoch 0/1, Round 15/50 (data per round: 14)
+2022-04-21 20:05:44,589 DEBUG Training Accuracy is 28.571428571428573%
+2022-04-21 20:05:49,918 DEBUG Epoch 0/1, Round 16/50 (data per round: 14)
+2022-04-21 20:06:27,839 DEBUG Training Accuracy is 42.857142857142854%
+2022-04-21 20:06:33,178 DEBUG Epoch 0/1, Round 17/50 (data per round: 14)
+2022-04-21 20:07:11,624 DEBUG Training Accuracy is 21.428571428571427%
+2022-04-21 20:07:17,038 DEBUG Epoch 0/1, Round 18/50 (data per round: 14)
+2022-04-21 20:07:54,966 DEBUG Training Accuracy is 7.142857142857143%
+2022-04-21 20:08:00,336 DEBUG Epoch 0/1, Round 19/50 (data per round: 14)
+2022-04-21 20:08:38,395 DEBUG Training Accuracy is 42.857142857142854%
+2022-04-21 20:08:43,703 DEBUG Epoch 0/1, Round 20/50 (data per round: 14)
+2022-04-21 20:09:21,813 DEBUG Training Accuracy is 35.714285714285715%
+2022-04-21 20:09:27,171 DEBUG Epoch 0/1, Round 21/50 (data per round: 14)
+2022-04-21 20:10:05,215 DEBUG Training Accuracy is 28.571428571428573%
+2022-04-21 20:10:10,579 DEBUG Epoch 0/1, Round 22/50 (data per round: 14)
+2022-04-21 20:10:48,722 DEBUG Training Accuracy is 42.857142857142854%
+2022-04-21 20:10:54,052 DEBUG Epoch 0/1, Round 23/50 (data per round: 14)
+2022-04-21 20:11:32,053 DEBUG Training Accuracy is 35.714285714285715%
+2022-04-21 20:11:37,374 DEBUG Epoch 0/1, Round 24/50 (data per round: 14)
+2022-04-21 20:12:15,332 DEBUG Training Accuracy is 28.571428571428573%
+2022-04-21 20:12:20,705 DEBUG Epoch 0/1, Round 25/50 (data per round: 14)
+2022-04-21 20:12:58,732 DEBUG Training Accuracy is 21.428571428571427%
+2022-04-21 20:13:04,059 DEBUG Epoch 0/1, Round 26/50 (data per round: 14)
+2022-04-21 20:13:41,958 DEBUG Training Accuracy is 35.714285714285715%
+2022-04-21 20:13:47,333 DEBUG Epoch 0/1, Round 27/50 (data per round: 14)
+2022-04-21 20:14:25,286 DEBUG Training Accuracy is 50.0%
+2022-04-21 20:14:30,604 DEBUG Epoch 0/1, Round 28/50 (data per round: 14)
+2022-04-21 20:15:08,804 DEBUG Training Accuracy is 50.0%
+2022-04-21 20:15:14,194 DEBUG Epoch 0/1, Round 29/50 (data per round: 14)
+2022-04-21 20:15:52,077 DEBUG Training Accuracy is 28.571428571428573%
+2022-04-21 20:15:57,384 DEBUG Epoch 0/1, Round 30/50 (data per round: 14)
+2022-04-21 20:16:35,376 DEBUG Training Accuracy is 28.571428571428573%
+2022-04-21 20:16:40,718 DEBUG Epoch 0/1, Round 31/50 (data per round: 14)
+2022-04-21 20:17:18,599 DEBUG Training Accuracy is 35.714285714285715%
+2022-04-21 20:17:23,954 DEBUG Epoch 0/1, Round 32/50 (data per round: 14)
+2022-04-21 20:18:01,794 DEBUG Training Accuracy is 64.28571428571429%
+2022-04-21 20:18:07,231 DEBUG Epoch 0/1, Round 33/50 (data per round: 14)
+2022-04-21 20:18:45,111 DEBUG Training Accuracy is 28.571428571428573%
+2022-04-21 20:18:50,636 DEBUG Epoch 0/1, Round 34/50 (data per round: 14)
+2022-04-21 20:19:29,021 DEBUG Training Accuracy is 57.142857142857146%
+2022-04-21 20:19:34,380 DEBUG Epoch 0/1, Round 35/50 (data per round: 14)
+2022-04-21 20:20:13,300 DEBUG Training Accuracy is 42.857142857142854%
+2022-04-21 20:20:18,643 DEBUG Epoch 0/1, Round 36/50 (data per round: 14)
+2022-04-21 20:20:56,555 DEBUG Training Accuracy is 42.857142857142854%
+2022-04-21 20:21:01,839 DEBUG Epoch 0/1, Round 37/50 (data per round: 14)
+2022-04-21 20:21:39,875 DEBUG Training Accuracy is 42.857142857142854%
+2022-04-21 20:21:45,267 DEBUG Epoch 0/1, Round 38/50 (data per round: 14)
+2022-04-21 20:22:23,382 DEBUG Training Accuracy is 64.28571428571429%
+2022-04-21 20:22:28,848 DEBUG Epoch 0/1, Round 39/50 (data per round: 14)
+2022-04-21 20:23:07,014 DEBUG Training Accuracy is 71.42857142857143%
+2022-04-21 20:23:12,382 DEBUG Epoch 0/1, Round 40/50 (data per round: 14)
+2022-04-21 20:23:50,300 DEBUG Training Accuracy is 50.0%
+2022-04-21 20:23:55,679 DEBUG Epoch 0/1, Round 41/50 (data per round: 14)
+2022-04-21 20:24:33,586 DEBUG Training Accuracy is 42.857142857142854%
+2022-04-21 20:24:38,942 DEBUG Epoch 0/1, Round 42/50 (data per round: 14)
+2022-04-21 20:25:16,848 DEBUG Training Accuracy is 42.857142857142854%
+2022-04-21 20:25:22,216 DEBUG Epoch 0/1, Round 43/50 (data per round: 14)
+2022-04-21 20:26:00,135 DEBUG Training Accuracy is 35.714285714285715%
+2022-04-21 20:26:05,433 DEBUG Epoch 0/1, Round 44/50 (data per round: 14)
+2022-04-21 20:26:43,543 DEBUG Training Accuracy is 21.428571428571427%
+2022-04-21 20:26:48,952 DEBUG Epoch 0/1, Round 45/50 (data per round: 14)
+2022-04-21 20:27:26,829 DEBUG Training Accuracy is 35.714285714285715%
+2022-04-21 20:27:32,187 DEBUG Epoch 0/1, Round 46/50 (data per round: 14)
+2022-04-21 20:28:10,143 DEBUG Training Accuracy is 42.857142857142854%
+2022-04-21 20:28:15,496 DEBUG Epoch 0/1, Round 47/50 (data per round: 14)
+2022-04-21 20:28:53,731 DEBUG Training Accuracy is 50.0%
+2022-04-21 20:28:59,073 DEBUG Epoch 0/1, Round 48/50 (data per round: 14)
+2022-04-21 20:29:36,993 DEBUG Training Accuracy is 42.857142857142854%
+2022-04-21 20:29:42,340 DEBUG Epoch 0/1, Round 49/50 (data per round: 14)
+2022-04-21 20:30:20,253 DEBUG Training Accuracy is 42.857142857142854%
+2022-04-21 20:30:30,002 DEBUG Generated newplots/ES1-BS14-LR0.01-M0.7-NH0-HS64-HN25-TT2167.131727695465-digits_train.eps
+2022-04-21 20:30:34,037 DEBUG Generated newplots/ES1-BS14-LR0.01-M0.7-NH0-HS64-HN25-TT2167.131727695465-digits_train_accu.eps
+2022-04-21 20:35:06,011 DEBUG 
+Training Setting: dataset digits, Total Round 150, data_per_round 14
+2022-04-21 20:35:06,012 DEBUG Model Setting: momentum 0.7, lr 0.01, number_hidden 0, hidden_size 64
+2022-04-21 20:35:06,012 DEBUG server:
+2022-04-21 20:35:06,012 DEBUG Sequential(
+  (0): Linear(in_features=25, out_features=7, bias=True)
+)
+2022-04-21 20:35:12,426 DEBUG Epoch 0/3, Round 0/50 (data per round: 14)
+2022-04-21 20:35:47,848 DEBUG Training Accuracy is 7.142857142857143%
+2022-04-21 20:35:49,374 DEBUG Validation Accuracy 18.571428954601288%
+
+2022-04-21 20:35:53,340 DEBUG Epoch 0/3, Round 1/50 (data per round: 14)
+2022-04-21 20:36:28,698 DEBUG Training Accuracy is 28.571428571428573%

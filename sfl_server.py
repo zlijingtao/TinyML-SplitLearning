@@ -49,7 +49,7 @@ random.seed(4321)
 np.random.seed(4321)
 
 epoch_size = 3 # default = 1
-samples_per_device = 315 # Amount of samples of each word to send to each device
+
 batch_size = 10 # Must be even, hsa to be split into 2 types of samples
 running_batch_accu = 0
 running_batch_accu_list = []
@@ -59,11 +59,15 @@ experiment = 'digits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
 size_hidden_nodes = 25
 if experiment == "custom":
     size_output_nodes = 5
+    samples_per_device = 250 # Amount of samples of each word to send to each device
 elif experiment == 'digits':
+    samples_per_device = 700 # Amount of samples of each word to send to each device
     size_output_nodes = 7
     batch_size = 14 # Must be even, hsa to be split into 2 types of samples
-else:
-    size_output_nodes = 2
+else: # mountain datasets
+    size_output_nodes = 3
+    samples_per_device = 300 # Amount of samples of each word to send to each device
+
 size_hidden_layer = (650+1)*size_hidden_nodes
 hidden_layer = (np.random.normal(size=(size_hidden_layer, )) * np.sqrt(2./650)).astype('float32')
 
@@ -837,11 +841,18 @@ def startFL():
     # Doing validation
     c_model.load_state_dict({'client.0.weight': torch.tensor(hidden_layer[:size_hidden_nodes*650]).view(650, size_hidden_nodes).t().float(), 'client.0.bias': torch.tensor(hidden_layer[size_hidden_nodes*650:]).float()})
     
-    test_in, test_out = getSamplesIIDDigits(35, 315)
+    if experiment == "digits":
+        test_in, test_out = getSamplesIIDDigits(70, 630)
 
-    error, accu = server_validate(test_in, test_out)
-    logger.debug(f"Validation Accuracy {100 * accu}%\n")
-    val_graph.append([error, accu, 0])
+        error, accu = server_validate(test_in, test_out)
+        logger.debug(f"Validation Accuracy {100 * accu}%\n")
+        val_graph.append([error, accu, 0])
+    elif experiment == "iid":
+        test_in, test_out = getSamplesIID(60, 300)
+
+        error, accu = server_validate(test_in, test_out)
+        logger.debug(f"Validation Accuracy {100 * accu}%\n")
+        val_graph.append([error, accu, 0])
 
     #################
     # Sending models

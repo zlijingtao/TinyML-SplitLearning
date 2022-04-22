@@ -6,9 +6,7 @@ import glob
 import json
 import wave
 import struct
-
-if not os.path.isdir("./processed_dataset"):
-    os.makedirs("./processed_dataset")
+import numpy as np
 
 def wav_to_floats(wave_file):
     w = wave.open(wave_file)
@@ -19,103 +17,66 @@ def wav_to_floats(wave_file):
     # a = [float(val) / pow(2, 15) for val in a]
     return a
 
-# search_path = os.path.join('P4_recordings_JT', '*.ogg')
-# for ogg_path in glob.glob(search_path):
-#     file_name = ogg_path.split('/')[1]
-#     word = file_name.split('_')[0]
-#     word_id = file_name.split('_')[1].split('.')[0]
-#     word = word.lower()
+word_name_list = ['_background_noise_']
+for word in word_name_list:
+    search_path = os.path.join(f'dataset/{word}', '*.wav')
+    counter = 0
+    while counter < 50:
+        for ogg_path in glob.glob(search_path):
 
-#     output_path = f'processed_dataset/{word}'
-#     if not os.path.isdir(output_path):
-#         os.makedirs(output_path)
-#     os.system(f"ffmpeg -i {ogg_path} -ar 16000 -acodec pcm_s16le processed_dataset/{word}/{word_id}_nohash_0.wav")
-#     data = {}
-#     signal = wav_to_floats(f"./processed_dataset/{word}/{word_id}_nohash_0.wav")
-#     data["values"] = signal[4000:20000]
-#     output_path = f'processed_json/{word}'
-#     if not os.path.isdir(output_path):
-#         os.makedirs(output_path)
-#     with open(f'./processed_json/{word}/{word_id}_nohash_0.json', 'w') as f:
-#         json.dump(data, f)
-
-# search_path = os.path.join('P4_recording2_rc', '*.ogg')
-# counter = 0
-# for ogg_path in glob.glob(search_path):
-#     file_name = ogg_path.split('/')[1]
-#     # print(file_name)
-#     word = file_name.split('_')[0]
-#     counter += 1
-#     word_id = "rc{}".format(counter)
-#     word = word.lower()
-
-#     output_path = f'processed_dataset/{word}'
-#     if not os.path.isdir(output_path):
-#         os.makedirs(output_path)
-#     ogg_path = ogg_path.replace(" ", "/ ")
-#     os.system(f"ffmpeg -i {ogg_path} -ar 16000 processed_dataset/{word}/{word_id}_nohash_0.wav")
-
-# search_path = os.path.join('p4_recording_rck2', '*.ogg')
-# counter = 0
-# for ogg_path in glob.glob(search_path):
-#     file_name = ogg_path.split('/')[1]
-#     # print(file_name)
-#     word = file_name.split('_')[0]
-#     counter += 1
-#     word_id = "rck2{}".format(counter)
-#     word = word.lower()
-
-#     output_path = f'processed_dataset/{word}'
-#     if not os.path.isdir(output_path):
-#         os.makedirs(output_path)
-#     ogg_path = ogg_path.replace(" ", "/ ")
-#     os.system(f"ffmpeg -i {ogg_path} -ar 16000 -acodec pcm_s16le processed_dataset/{word}/{word_id}_nohash_0.wav")
-#     data = {}
-#     signal = wav_to_floats(f"./processed_dataset/{word}/{word_id}_nohash_0.wav")
-#     data["values"] = signal[4000:20000]
-#     with open(f'./processed_json/{word}/{word_id}_nohash_0.json', 'w') as f:
-#         json.dump(data, f)
+            file_name = ogg_path.split('/')[-1]
+            output_path = f'datasets/CN_digits'
+            data = {"payload":{}}
+            signal = wav_to_floats(ogg_path)
+            if len(signal) == 16000:
+                data["payload"]["values"] = signal
+                counter += 1
+                with open(f'{output_path}/{word}.{counter}.json', 'w') as f:
+                    json.dump(data, f)
+            else: #background noise
+                rand_idx = np.random.random_integers(0, 50)
+                data["payload"]["values"] = signal[rand_idx*16000:(rand_idx+1)*16000]
+                counter += 1
+                with open(f'{output_path}/silence.{500+counter}.json', 'w') as f:
+                    json.dump(data, f)
+            if counter == 50:
+                break
 
 
-
-search_path = os.path.join('CN_digits_bk', '*.json')
+word_name_list = ['no', 'off', 'marvin', 'follow', 'cat', 'house', 'learn', 'sheila', 'visual', 'zero']
 counter = 0
-print(len(glob.glob(search_path)))
-for ogg_path in glob.glob(search_path):
-    file_name = ogg_path.split('/')[1]
-    # print(file_name)
-    word = file_name.split('_')[0]
-    # if word == "one":
-    #     word = "class1"
-    # if word == "ltwo":
-    #     word = "class2"
-    # if word == "three":
-    #     word = "class3"
-    # if word == "four":
-    #     word = "class4"
-    # if word == "five":
-    #     word = "class5"
-    # if word == "silence":
-    #     word = "class0"
-    # if word == "unknown":
-    #     word = "classx"
-    counter += 1
-    word_id = str(counter)
-    word = word.lower()
-    # print(ogg_path)
+while counter < 50:
+    for word in word_name_list:
+        search_path = os.path.join(f'dataset/{word}', '*.wav')
+        
+        ogg_path = glob.glob(search_path)[counter]
+        output_path = f'datasets/CN_digits'
+        data = {"payload":{}}
+        signal = wav_to_floats(ogg_path)
+        if len(signal) == 16000:
+            data["payload"]["values"] = signal
+            counter += 1
+            print(f"add {ogg_path}")
+            with open(f'{output_path}/unknown.{500+counter}.json', 'w') as f:
+                json.dump(data, f)
+        if counter == 50:
+            break
 
-    with open(ogg_path, encoding='utf-8', errors='ignore') as json_data:
-        data = json.load(json_data, strict=False)
-        if len(data['payload']['values']) != 16000:
-            print(len(data['payload']['values']))
-            print(ogg_path)
+word_name_list = ['one', 'two', 'three', 'four', 'five']
+for word in word_name_list:
+    search_path = os.path.join(f'dataset/{word}', '*.wav')
+    counter = 0
+    for ogg_path in glob.glob(search_path):
         
-        # with open(f'./processed_json/{word}/{word_id}_nohash_0.json', 'w') as f:
-        #     json.dump(data, f)
-        # print(len(data['payload']['values']))
-    # with open(str(ogg_path)) as f:
-    #     print(f)
-    #     data = json.loads(f.read().decode("utf-8"))
-        
-    #     print(len(data['payload']['values']))
-    # os.rename(ogg_path,f'processed_digits/{word}_{word_id}.json') 
+        file_name = ogg_path.split('/')[-1]
+        output_path = f'datasets/CN_digits'
+        data = {"payload":{}}
+        signal = wav_to_floats(ogg_path)
+        print(len(signal))
+        if len(signal) == 16000:
+            data["payload"]["values"] = signal
+            counter += 1
+            with open(f'{output_path}/{word}.{500+counter}.json', 'w') as f:
+                json.dump(data, f)
+        if counter == 50:
+            break
