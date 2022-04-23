@@ -17,6 +17,11 @@ def wav_to_floats(wave_file):
     # a = [float(val) / pow(2, 15) for val in a]
     return a
 
+#delete #>500 samples under CN_digts
+
+
+
+
 word_name_list = ['_background_noise_']
 for word in word_name_list:
     search_path = os.path.join(f'dataset/{word}', '*.wav')
