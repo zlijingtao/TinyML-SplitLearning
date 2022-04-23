@@ -3,18 +3,30 @@ from serial.tools.list_ports import comports
 
 import struct
 import time
-import numpy as np
+
 import matplotlib.pyplot as plt
 import threading
 import time
 import json
 import os
 import random
+
+import logging
+import sys
+
+random_seed=1234
 import torch
 import torch.nn as nn
 import torch.nn.init as init
-import logging
-import sys
+import numpy as np
+torch.manual_seed(random_seed)
+torch.cuda.manual_seed(random_seed)
+torch.cuda.manual_seed_all(random_seed)
+np.random.seed(random_seed)
+random.seed(random_seed)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+
 formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
 
 def setup_logger(name, log_file, level=logging.INFO, console_out = True):
@@ -45,9 +57,6 @@ model_log_file = "./log.txt"
 logger = setup_logger('main_logger', model_log_file, level=logging.DEBUG)
 
 
-random.seed(1234)
-np.random.seed(1234)
-
 
 
 batch_size = 10 # Must be even, hsa to be split into 2 types of samples
@@ -58,9 +67,10 @@ running_batch_accu_list = []
 
 
 epoch_size = 10 # default = 1
-step_size = 7 # The real batch size
+step_size = 1 # The real batch size
 experiment = 'digits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
-model_type = "fc"
+# model_type = "fc"
+model_type = "conv1d"
 
 momentum = 0.7
 learningRate= 0.01
@@ -199,6 +209,7 @@ class server_conv_model(nn.Module):
         model_list = []
         last_layer_input_size = 800
         model_list.append(nn.Conv1d(16, 8, kernel_size = 3, padding="same", bias = False))
+        model_list.append(nn.BatchNorm1d(8))
         model_list.append(nn.ReLU())
         model_list.append(nn.Flatten(1))
         last_layer_input_size = 400
@@ -1048,9 +1059,9 @@ for epoch in range(epoch_size):
     total_round = int(samples_per_device/batch_size)
     
     # shuffle train data
-    permute_idx = np.random.permutation(samples_per_device)
-    train_in[:, ] = train_in[permute_idx, ]
-    train_out[:, ] = train_out[permute_idx, ]
+    # permute_idx = np.random.permutation(samples_per_device)
+    # train_in[:, ] = train_in[permute_idx, ]
+    # train_out[:, ] = train_out[permute_idx, ]
 
     for batch in range(total_round):
         logger.debug("Epoch {}/{}, Round {}/{} (data per round: {})".format(epoch, epoch_size, batch, total_round, batch_size))
