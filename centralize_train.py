@@ -70,7 +70,7 @@ epoch_size = 10 # default = 1
 step_size = 1 # The real batch size
 experiment = 'digits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
 # model_type = "fc"
-model_type = "conv1d"
+model_type = "fc"
 
 momentum = 0.7
 learningRate= 0.01
@@ -1059,9 +1059,9 @@ for epoch in range(epoch_size):
     total_round = int(samples_per_device/batch_size)
     
     # shuffle train data
-    # permute_idx = np.random.permutation(samples_per_device)
-    # train_in[:, ] = train_in[permute_idx, ]
-    # train_out[:, ] = train_out[permute_idx, ]
+    permute_idx = np.random.permutation(samples_per_device)
+    train_in[:, ] = train_in[permute_idx, ]
+    train_out[:, ] = train_out[permute_idx, ]
 
     for batch in range(total_round):
         logger.debug("Epoch {}/{}, Round {}/{} (data per round: {})".format(epoch, epoch_size, batch, total_round, batch_size))
