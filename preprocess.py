@@ -19,18 +19,15 @@ def wav_to_floats(wave_file):
 
 #delete #>500 samples under CN_digts
 
-
-
-
 word_name_list = ['_background_noise_']
 for word in word_name_list:
     search_path = os.path.join(f'dataset/{word}', '*.wav')
     counter = 0
-    while counter < 50:
+    while counter < 200:
         for ogg_path in glob.glob(search_path):
 
             file_name = ogg_path.split('/')[-1]
-            output_path = f'datasets/CN_digits'
+            output_path = f'datasets/EN_digits'
             data = {"payload":{}}
             signal = wav_to_floats(ogg_path)
             if len(signal) == 16000:
@@ -44,18 +41,18 @@ for word in word_name_list:
                 counter += 1
                 with open(f'{output_path}/silence.{500+counter}.json', 'w') as f:
                     json.dump(data, f)
-            if counter == 50:
+            if counter == 200:
                 break
 
 
 word_name_list = ['no', 'off', 'marvin', 'follow', 'cat', 'house', 'learn', 'sheila', 'visual', 'zero']
 counter = 0
-while counter < 50:
+while counter < 200:
     for word in word_name_list:
         search_path = os.path.join(f'dataset/{word}', '*.wav')
         
         ogg_path = glob.glob(search_path)[counter]
-        output_path = f'datasets/CN_digits'
+        output_path = f'datasets/EN_digits'
         data = {"payload":{}}
         signal = wav_to_floats(ogg_path)
         if len(signal) == 16000:
@@ -64,7 +61,7 @@ while counter < 50:
             print(f"add {ogg_path}")
             with open(f'{output_path}/unknown.{500+counter}.json', 'w') as f:
                 json.dump(data, f)
-        if counter == 50:
+        if counter == 200:
             break
 
 word_name_list = ['one', 'two', 'three', 'four', 'five']
@@ -74,7 +71,7 @@ for word in word_name_list:
     for ogg_path in glob.glob(search_path):
         
         file_name = ogg_path.split('/')[-1]
-        output_path = f'datasets/CN_digits'
+        output_path = f'datasets/EN_digits'
         data = {"payload":{}}
         signal = wav_to_floats(ogg_path)
         print(len(signal))
@@ -83,5 +80,5 @@ for word in word_name_list:
             counter += 1
             with open(f'{output_path}/{word}.{500+counter}.json', 'w') as f:
                 json.dump(data, f)
-        if counter == 50:
+        if counter == 200:
             break

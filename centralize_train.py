@@ -57,8 +57,6 @@ model_log_file = "./log.txt"
 logger = setup_logger('main_logger', model_log_file, level=logging.DEBUG)
 
 
-
-
 batch_size = 10 # Must be even, hsa to be split into 2 types of samples
 
 
@@ -66,13 +64,13 @@ running_batch_accu = 0
 running_batch_accu_list = []
 
 
-epoch_size = 10 # default = 1
+epoch_size = 3 # default = 1
 step_size = 1 # The real batch size
 experiment = 'digits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
 # model_type = "fc"
 model_type = "fc"
 
-momentum = 0.7
+momentum = 0.6
 learningRate= 0.01
 number_hidden = 0
 hidden_size = 128
@@ -83,7 +81,7 @@ if experiment == "custom":
     samples_per_device = 250 # Amount of samples of each word to send to each device
     total_samples = 250
 elif experiment == 'digits':
-    samples_per_device = 280 # Amount of samples of each word to send to each device
+    samples_per_device = 315 # Amount of samples of each word to send to each device
     size_output_nodes = 7
     batch_size = 14 # Must be even, hsa to be split into 2 types of samples
     total_samples = 350
@@ -188,7 +186,7 @@ class client_conv_model(nn.Module):
         super(client_conv_model, self).__init__()
 
         model_list = []
-        model_list.append(nn.Conv1d(13, 16, kernel_size = 3, padding="same", bias = False))
+        model_list.append(nn.Conv1d(13, 4, kernel_size = 3, padding="same"))
         model_list.append(nn.ReLU())
 
         self.client = nn.Sequential(*model_list)
@@ -208,14 +206,17 @@ class server_conv_model(nn.Module):
         last_layer_input_size = input_size
         model_list = []
         last_layer_input_size = 800
-        model_list.append(nn.Conv1d(16, 8, kernel_size = 3, padding="same", bias = False))
+        model_list.append(nn.Conv1d(4, 8, kernel_size = 3, padding="same"))
         model_list.append(nn.BatchNorm1d(8))
         model_list.append(nn.ReLU())
+        model_list.append(nn.Conv1d(8, 4, kernel_size = 3, padding="same"))
+        model_list.append(nn.BatchNorm1d(4))
+        model_list.append(nn.ReLU())
         model_list.append(nn.Flatten(1))
-        last_layer_input_size = 400
+        last_layer_input_size = 200
         for _ in range(number_hidden):
             model_list.append(nn.Linear(last_layer_input_size, hidden_size, bias = True))
-            model_list.append(nn.Dropout(0.5))
+            # model_list.append(nn.Dropout(0.5))
             model_list.append(nn.ReLU())
             last_layer_input_size = hidden_size
         
@@ -258,14 +259,14 @@ class server_conv2d_model(nn.Module):
         last_layer_input_size = input_size
         model_list = []
         last_layer_input_size = 800
-        model_list.append(nn.Conv2d(4, 8, kernel_size = 3, stride = 1, bias = False))
-        model_list.append(nn.BatchNorm2d(8))
-        model_list.append(nn.ReLU())
-        model_list.append(nn.Conv2d(8, 16, kernel_size = 3, stride = 2, bias = False))
+        # model_list.append(nn.Conv2d(4, 8, kernel_size = 3, stride = 1, bias = False))
+        # model_list.append(nn.BatchNorm2d(8))
+        # model_list.append(nn.ReLU())
+        model_list.append(nn.Conv2d(4, 16, kernel_size = 3, stride = 2, bias = False))
         model_list.append(nn.BatchNorm2d(16))
         model_list.append(nn.ReLU())
         model_list.append(nn.Flatten(1))
-        last_layer_input_size = 160
+        last_layer_input_size = 352
         for _ in range(number_hidden):
             model_list.append(nn.Linear(last_layer_input_size, hidden_size, bias = True))
             # model_list.append(nn.Dropout(0.25))
@@ -332,22 +333,32 @@ test_pedraforca_files = [file for file in os.listdir("datasets/test") if file.st
 # digits_five_files_EN = [file for file in os.listdir("datasets/CN_digits") if file.startswith("five") and int(file.split(".")[1])>=500]
 # digits_unknown_files_EN = [file for file in os.listdir("datasets/CN_digits") if file.startswith("unknown") and int(file.split(".")[1])>=500]
 
-# digits_silence_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("silence") and int(file.split(".")[1])>=500]
-# digits_one_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("one") and int(file.split(".")[1])>=500]
-# digits_two_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("two") and int(file.split(".")[1])>=500]
-# digits_three_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("three") and int(file.split(".")[1])>=500]
-# digits_four_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("four") and int(file.split(".")[1])>=500]
-# digits_five_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("five") and int(file.split(".")[1])>=500]
-# digits_unknown_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("unknown") and int(file.split(".")[1])>=500]
+digits_silence_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("silence") and int(file.split(".")[1])>=500]
+digits_one_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("one") and int(file.split(".")[1])>=500]
+digits_two_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("two") and int(file.split(".")[1])>=500]
+digits_three_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("three") and int(file.split(".")[1])>=500]
+digits_four_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("four") and int(file.split(".")[1])>=500]
+digits_five_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("five") and int(file.split(".")[1])>=500]
+digits_unknown_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("unknown") and int(file.split(".")[1])>=500]
 
 
-digits_silence_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("silence") and int(file.split(".")[1])<500]
-digits_one_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("one") and int(file.split(".")[1])<500]
-digits_two_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("two") and int(file.split(".")[1])<500]
-digits_three_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("three") and int(file.split(".")[1])<500]
-digits_four_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("four") and int(file.split(".")[1])<500]
-digits_five_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("five") and int(file.split(".")[1])<500]
-digits_unknown_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("unknown") and int(file.split(".")[1])<500]
+# digits_silence_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("silence") and int(file.split(".")[1])<500]
+# digits_one_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("one") and int(file.split(".")[1])<500]
+# digits_two_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("two") and int(file.split(".")[1])<500]
+# digits_three_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("three") and int(file.split(".")[1])<500]
+# digits_four_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("four") and int(file.split(".")[1])<500]
+# digits_five_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("five") and int(file.split(".")[1])<500]
+# digits_unknown_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("unknown") and int(file.split(".")[1])<500]
+
+
+# digits_silence_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("silence") and int(file.split(".")[1])>=500]
+# digits_one_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("one") and int(file.split(".")[1])>=500]
+# digits_two_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("two") and int(file.split(".")[1])>=500]
+# digits_three_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("three") and int(file.split(".")[1])>=500]
+# digits_four_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("four") and int(file.split(".")[1])>=500]
+# digits_five_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("five") and int(file.split(".")[1])>=500]
+# digits_unknown_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("unknown") and int(file.split(".")[1])>=500]
+
 
 
 random.shuffle(digits_silence_files)
@@ -647,6 +658,7 @@ def getSamplesIIDDigits(batch_size, batch_start_index):
         filename = digits_silence_files[i]
         num_button = 1
         input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
         

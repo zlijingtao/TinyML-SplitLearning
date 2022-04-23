@@ -54,12 +54,17 @@ batch_size = 10 # Must be even, hsa to be split into 2 types of samples
 running_batch_accu = 0
 running_batch_accu_list = []
 experiment = 'digits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
+experiment = 'ENdigits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
 
 # initialize client-side model
 size_hidden_nodes = 25
 if experiment == "custom":
     size_output_nodes = 5
     samples_per_device = 250 # Amount of samples of each word to send to each device
+elif experiment == 'ENdigits':
+    samples_per_device = 1400 # Amount of samples of each word to send to each device
+    size_output_nodes = 7
+    batch_size = 14 # Must be even, hsa to be split into 2 types of samples
 elif experiment == 'digits':
     samples_per_device = 630 # Amount of samples of each word to send to each device
     size_output_nodes = 7
@@ -175,13 +180,22 @@ blau_files = [file for file in os.listdir("datasets/colors") if file.startswith(
 test_montserrat_files = [file for file in os.listdir("datasets/test/") if file.startswith("montserrat")]
 test_pedraforca_files = [file for file in os.listdir("datasets/test") if file.startswith("pedraforca")]
 
-digits_silence_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("silence")]
-digits_one_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("one")]
-digits_two_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("two")]
-digits_three_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("three")]
-digits_four_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("four")]
-digits_five_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("five")]
-digits_unknown_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("unknown")]
+if experiment == "digits":
+    digits_silence_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("silence")]
+    digits_one_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("one")]
+    digits_two_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("two")]
+    digits_three_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("three")]
+    digits_four_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("four")]
+    digits_five_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("five")]
+    digits_unknown_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("unknown")]
+elif experiment == "ENdigits":
+    digits_silence_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("silence") and int(file.split(".")[1])>=500]
+    digits_one_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("one") and int(file.split(".")[1])>=500]
+    digits_two_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("two") and int(file.split(".")[1])>=500]
+    digits_three_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("three") and int(file.split(".")[1])>=500]
+    digits_four_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("four") and int(file.split(".")[1])>=500]
+    digits_five_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("five") and int(file.split(".")[1])>=500]
+    digits_unknown_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("unknown") and int(file.split(".")[1])>=500]
 
 random.shuffle(digits_silence_files)
 random.shuffle(digits_one_files)
@@ -418,6 +432,45 @@ def sendSamplesIIDDigits(device, deviceIndex, batch_size, batch_index):
         num_button = 7
         sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
 
+
+def sendSamplesIIDENDigits(device, deviceIndex, batch_size, batch_index):
+    global digits_silence_files, digits_one_files, digits_two_files, digits_three_files, digits_four_files, digits_five_files, digits_unknown_files
+
+    # each_sample_amt = int(batch_size/2)
+
+    start = (deviceIndex*samples_per_device) + (batch_index * batch_size)
+    end = (deviceIndex*samples_per_device) + (batch_index * batch_size) + batch_size
+    real_start = start // 7
+    real_end = (end - start) // 7 + start // 7
+    for i in range(real_start, real_end):
+        filename = digits_silence_files[i]
+        num_button = 1
+        sendSample(device, 'datasets/EN_digits/'+filename, num_button, deviceIndex)
+        
+        filename = digits_one_files[i]
+        num_button = 2
+        sendSample(device, 'datasets/EN_digits/'+filename, num_button, deviceIndex)
+
+        filename = digits_two_files[i]
+        num_button = 3
+        sendSample(device, 'datasets/EN_digits/'+filename, num_button, deviceIndex)
+
+        filename = digits_three_files[i]
+        num_button = 4
+        sendSample(device, 'datasets/EN_digits/'+filename, num_button, deviceIndex)
+
+        filename = digits_four_files[i]
+        num_button = 5
+        sendSample(device, 'datasets/EN_digits/'+filename, num_button, deviceIndex)
+
+        filename = digits_five_files[i]
+        num_button = 6
+        sendSample(device, 'datasets/EN_digits/'+filename, num_button, deviceIndex)
+
+        filename = digits_unknown_files[i]
+        num_button = 7
+        sendSample(device, 'datasets/EN_digits/'+filename, num_button, deviceIndex)
+
 # Batch size: The amount of samples to send
 def sendSamplesIID(device, deviceIndex, batch_size, batch_index):
     global montserrat_files, pedraforca_files, mountains
@@ -582,16 +635,16 @@ def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False
         
 
         #Receive input from client (uncomment corresponding part (line 141) in main.ino)
-        # input_list = []
-        # for _ in range(50):
-        #     inputs = device.readline().decode()
-        #     inputs_converted = convert_string_to_array(inputs)
-        #     input_list.append(inputs_converted)
-        # input_array = np.concatenate(input_list, axis = 0).reshape(1,650)
+        input_list = []
+        for _ in range(50):
+            inputs = device.readline().decode()
+            inputs_converted = convert_string_to_array(inputs)
+            input_list.append(inputs_converted)
+        input_array = np.concatenate(input_list, axis = 0).reshape(1,650)
 
-        # if not os.path.isdir("processed_datasets/{}".format(experiment)):
-        #     os.makedirs("processed_datasets/{}".format(experiment))
-        # np.save("processed_datasets/{}/{}.npy".format(experiment, samplePath.split("/")[-1].replace(".json", "")), input_array)
+        if not os.path.isdir("processed_datasets/{}".format(experiment)):
+            os.makedirs("processed_datasets/{}".format(experiment))
+        np.save("processed_datasets/{}/{}.npy".format(experiment, samplePath.split("/")[-1].replace(".json", "")), input_array)
 
         # Receive activation from client
         outputs = device.readline().decode()
@@ -932,6 +985,8 @@ for epoch in range(epoch_size):
                 thread = threading.Thread(target=sendSamplesIIDCustom, args=(device, deviceIndex, batch_size, batch))
             elif experiment == 'digits':
                 thread = threading.Thread(target=sendSamplesIIDDigits, args=(device, deviceIndex, batch_size, batch))
+            elif experiment == 'ENdigits':
+                thread = threading.Thread(target=sendSamplesIIDENDigits, args=(device, deviceIndex, batch_size, batch))
 
             thread.daemon = True
             thread.start()
