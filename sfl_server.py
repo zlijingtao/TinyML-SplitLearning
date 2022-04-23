@@ -61,7 +61,7 @@ if experiment == "custom":
     size_output_nodes = 5
     samples_per_device = 250 # Amount of samples of each word to send to each device
 elif experiment == 'digits':
-    samples_per_device = 700 # Amount of samples of each word to send to each device
+    samples_per_device = 630 # Amount of samples of each word to send to each device
     size_output_nodes = 7
     batch_size = 14 # Must be even, hsa to be split into 2 types of samples
 else: # mountain datasets
