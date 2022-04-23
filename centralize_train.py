@@ -48,13 +48,24 @@ logger = setup_logger('main_logger', model_log_file, level=logging.DEBUG)
 random.seed(4321)
 np.random.seed(4321)
 
-epoch_size = 3 # default = 1
+
 
 batch_size = 10 # Must be even, hsa to be split into 2 types of samples
+
+
 running_batch_accu = 0
 running_batch_accu_list = []
-experiment = 'digits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
 
+
+epoch_size = 5 # default = 1
+step_size = 7 # The real batch size
+experiment = 'digits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
+model_type = "conv2d"
+
+momentum = 0.7
+learningRate= 0.01
+number_hidden = 1
+hidden_size = 128
 # initialize client-side model
 size_hidden_nodes = 25
 if experiment == "custom":
@@ -71,7 +82,7 @@ else: # mountain datasets
 size_hidden_layer = (650+1)*size_hidden_nodes
 hidden_layer = (np.random.normal(size=(size_hidden_layer, )) * np.sqrt(2./650)).astype('float32')
 
-logger.debug("\nCentralized Training: dataset {}, Total Round {}, data_per_round {}". format(experiment, epoch_size * int(samples_per_device/batch_size), batch_size))
+logger.debug("\nCentralized Training: dataset {}, Total Round {}, data_per_round {}, batch size {}". format(experiment, epoch_size * int(samples_per_device/batch_size), batch_size, step_size))
 
 # # We add an extra layer at the server-side model
 # neuron_layer_2nd = 2 * size_hidden_nodes
@@ -87,17 +98,23 @@ size_output_layer = (size_hidden_nodes+1)*size_output_nodes # why we need one mo
 output_layer = np.random.uniform(-0.5, 0.5, size_output_layer).astype('float32')
 output_weight_updates  = np.zeros_like(output_layer)
 
-momentum = 0.7
-learningRate= 0.01
-number_hidden = 0
-hidden_size = 64
 
-logger.debug("Model Setting: momentum {}, lr {}, number_hidden {}, hidden_size {}". format(momentum, learningRate, number_hidden, hidden_size))
+
+logger.debug("Model Setting: model_type: {}, momentum {}, lr {}, number_hidden {}, hidden_size {}". format(model_type, momentum, learningRate, number_hidden, hidden_size))
 
 def init_weights(m):
     if isinstance(m, nn.Linear):
       init.kaiming_normal(m.weight)
-      m.bias.data.zero_()
+      if m.bias is not None:
+        m.bias.data.zero_()
+    elif isinstance(m, nn.Conv1d):
+      init.kaiming_normal(m.weight)
+      if m.bias is not None:
+        m.bias.data.zero_()
+    elif isinstance(m, nn.Conv2d):
+      init.kaiming_normal(m.weight)
+      if m.bias is not None:
+        m.bias.data.zero_()
 # def init_weights(m):
 #     if type(m) == nn.Linear:
 #         torch.nn.init.uniform_(m.weight, a = -0.5, b = 0.5)
@@ -151,15 +168,123 @@ class server_model(nn.Module):
         out = self.server(x)
         return out
 
+class client_conv_model(nn.Module):
+    '''
+    VGG model 
+    '''
+    def __init__(self):
+        super(client_conv_model, self).__init__()
 
-s_model = server_model(num_class = size_output_nodes, number_hidden = number_hidden, hidden_size = hidden_size, input_size = size_hidden_nodes)
+        model_list = []
+        model_list.append(nn.Conv1d(13, 16, kernel_size = 3, padding="same", bias = False))
+        model_list.append(nn.ReLU())
+
+        self.client = nn.Sequential(*model_list)
+
+    def forward(self, x):
+        # x = x.view(x.size(0), 13, 50)
+        out = self.client(x)
+        return out
+
+class server_conv_model(nn.Module):
+    '''
+    VGG model 
+    '''
+    def __init__(self, num_class = 3, number_hidden = 0, hidden_size = 128, input_size = (50, 13)):
+        super(server_conv_model, self).__init__()
+
+        last_layer_input_size = input_size
+        model_list = []
+        last_layer_input_size = 800
+        model_list.append(nn.Conv1d(16, 8, kernel_size = 3, padding="same", bias = False))
+        model_list.append(nn.ReLU())
+        model_list.append(nn.Flatten(1))
+        last_layer_input_size = 400
+        for _ in range(number_hidden):
+            model_list.append(nn.Linear(last_layer_input_size, hidden_size, bias = True))
+            model_list.append(nn.Dropout(0.5))
+            model_list.append(nn.ReLU())
+            last_layer_input_size = hidden_size
+        
+        model_list.append(nn.Linear(last_layer_input_size, num_class, bias = True))
+
+        self.server = nn.Sequential(*model_list)
+
+        print("server:")
+        print(self.server)
+    def forward(self, x):
+        out = self.server(x)
+        return out
+
+
+class client_conv2d_model(nn.Module):
+    '''
+    VGG model 
+    '''
+    def __init__(self):
+        super(client_conv2d_model, self).__init__()
+
+        model_list = []
+        model_list.append(nn.Conv2d(1, 8, kernel_size = 5, stride = 2, bias = False))
+        model_list.append(nn.ReLU())
+
+        self.client = nn.Sequential(*model_list)
+
+    def forward(self, x):
+        # x = x.view(x.size(0), 13, 50)
+        out = self.client(x)
+        return out
+
+class server_conv2d_model(nn.Module):
+    '''
+    VGG model 
+    '''
+    def __init__(self, num_class = 3, number_hidden = 0, hidden_size = 128, input_size = (50, 13)):
+        super(server_conv2d_model, self).__init__()
+
+        last_layer_input_size = input_size
+        model_list = []
+        last_layer_input_size = 800
+        model_list.append(nn.Conv2d(8, 32, kernel_size = 3, stride = 1, bias = False))
+        model_list.append(nn.ReLU())
+        model_list.append(nn.Conv2d(32, 64, kernel_size = 3, stride = 2, bias = False))
+        model_list.append(nn.ReLU())
+        model_list.append(nn.Flatten(1))
+        last_layer_input_size = 640
+        for _ in range(number_hidden):
+            model_list.append(nn.Linear(last_layer_input_size, hidden_size, bias = True))
+            # model_list.append(nn.Dropout(0.5))
+            model_list.append(nn.ReLU())
+            last_layer_input_size = hidden_size
+        
+        model_list.append(nn.Linear(last_layer_input_size, num_class, bias = True))
+
+        self.server = nn.Sequential(*model_list)
+
+        print("server:")
+        print(self.server)
+    def forward(self, x):
+        out = self.server(x)
+        return out
+
+if model_type == "fc":
+    s_model = server_model(num_class = size_output_nodes, number_hidden = number_hidden, hidden_size = hidden_size, input_size = size_hidden_nodes)
+
+    c_model = client_model()
+elif model_type == "conv1d":
+    s_model = server_conv_model(num_class = size_output_nodes, number_hidden = number_hidden, hidden_size = hidden_size)
+
+    c_model = client_conv_model()
+elif model_type == "conv2d":
+    s_model = server_conv2d_model(num_class = size_output_nodes, number_hidden = number_hidden, hidden_size = hidden_size)
+
+    c_model = client_conv2d_model()
+
+c_model.apply(init_weights)
 s_model.apply(init_weights)
-c_model = client_model()
-# print(c_model.state_dict())
-c_model.load_state_dict({'client.0.weight': torch.tensor(hidden_layer[:size_hidden_nodes*650]).view(650, size_hidden_nodes).t().float(), 'client.0.bias': torch.tensor(hidden_layer[size_hidden_nodes*650:]).float()})
+
 s_optimizer = torch.optim.SGD(list(s_model.parameters()), lr=learningRate, momentum=momentum, weight_decay=5e-4)
 c_optimizer = torch.optim.SGD(list(c_model.parameters()), lr=learningRate, momentum=momentum, weight_decay=5e-4)
-# s_optimizer = torch.optim.Adam(list(s_model.parameters()), lr=learningRate)
 
 
 pauseListen = False # So there are no threads reading the serial input at the same time
@@ -273,6 +398,7 @@ def server_validate(test_in, test_out):
     return error, accu
 
 def server_train(train_in, train_out):
+
     input = torch.tensor(train_in).float()
     
     label = torch.from_numpy(train_out).view(input.size(0),).long()
@@ -296,13 +422,8 @@ def server_train(train_in, train_out):
     s_optimizer.step()
     c_optimizer.step()
     
-    if torch.argmax(output) == label:
-        accu = 1
-    else:
-        accu = 0
-    # accu = torch.argmax(output) == label
-
-    # accu = accu.detach().numpy()
+    accu = (torch.argmax(output, dim = 1) == label).sum()
+    accu = accu.detach().numpy()
     # print(accu)
     return error, accu
     
@@ -876,21 +997,41 @@ if experiment == 'digits':
     train_in, train_out = getSamplesIIDDigits(samples_per_device, 0)
     test_in, test_out = getSamplesIIDDigits(700 - samples_per_device, samples_per_device)
 
+if model_type == "conv1d":
+    train_in = np.reshape(train_in, (samples_per_device, 13, 50))
+    # train_in = np.reshape(train_in, (samples_per_device, 50, 13)).transpose(0, 2, 1)
+    test_in = np.reshape(test_in, (700 - samples_per_device, 13, 50))
+    # test_in = np.reshape(test_in, (700 - samples_per_device, 50, 13)).transpose(0, 2, 1)
+elif model_type == "conv2d":
+    train_in = np.reshape(train_in, (samples_per_device, 1, 13, 50))
+    # train_in = np.reshape(train_in, (samples_per_device, 50, 13)).transpose(0, 2, 1)
+    test_in = np.reshape(test_in, (700 - samples_per_device, 1, 13, 50))
+    # test_in = np.reshape(test_in, (700 - samples_per_device, 50, 13)).transpose(0, 2, 1)
+
+
+
 init_time = time.time()
+
 for epoch in range(epoch_size):
+    
     total_round = int(samples_per_device/batch_size)
     
+    # shuffle train data
+    permute_idx = np.random.permutation(samples_per_device)
+    train_in[:, ] = train_in[permute_idx, ]
+    train_out[:, ] = train_out[permute_idx, ]
+
     for batch in range(total_round):
         logger.debug("Epoch {}/{}, Round {}/{} (data per round: {})".format(epoch, epoch_size, batch, total_round, batch_size))
         running_batch_accu = 0
         
-        for step in range(batch_size):
-            batch_train_in = train_in[batch*batch_size+step:batch*batch_size+step+1,:]
-            batch_train_out = train_out[batch*batch_size+step:batch*batch_size+step+1,:]
+        for step in range(batch_size//step_size):
+            batch_train_in = train_in[batch*batch_size+step*step_size:batch*batch_size+(step+1)*step_size,:]
+            batch_train_out = train_out[batch*batch_size+step*step_size:batch*batch_size+(step+1)*step_size,:]
 
             train_error, train_accu = server_train(batch_train_in, batch_train_out)
 
-            running_batch_accu += int(train_accu)
+            running_batch_accu += train_accu
             
             graph.append([batch, train_error, 0])
 
@@ -901,9 +1042,9 @@ for epoch in range(epoch_size):
         val_graph.append([val_error, val_accu, 0])
     
         logger.debug("Training Accuracy is {}%".format(100 * running_batch_accu/batch_size))
-        
+        print(running_batch_accu, batch_size)
         running_batch_accu_list.append(running_batch_accu/batch_size)
-    print(running_batch_accu_list)
+        
 train_time = time.time() - init_time
 
 plt.figure(1)
