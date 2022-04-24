@@ -70,7 +70,7 @@ epoch_size = 3 # default = 1
 step_size = 1 # The real batch size
 experiment = 'EN_digits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
 # model_type = "fc"
-model_type = "conv1d"
+model_type = "conv2d"
 
 momentum = 0.6
 learningRate= 0.005
@@ -84,11 +84,13 @@ if model_type == "fc" and experiment == "EN_digits":
     hidden_size = 128
 
 if model_type == "conv2d" and experiment == "EN_digits":
+    #best
     momentum = 0.6
     learningRate= 0.005
     number_hidden = 1
-    hidden_size = 128
-
+    hidden_size = 256 #128
+    #TODO: change
+    
 
 # initialize client-side model
 size_hidden_nodes = 25
@@ -107,15 +109,7 @@ elif experiment == 'EN_digits':
     batch_size = 14 # Must be even, hsa to be split into 2 types of samples
     total_samples = 7000
 else: # mountain datasets
-    size_output_nodes = 3
-    samples_per_device = 300 # Amount of samples of each word to send to each device
-    total_samples = 360
-size_hidden_layer = (650+1)*size_hidden_nodes
-hidden_layer = (np.random.normal(size=(size_hidden_layer, )) * np.sqrt(2./650)).astype('float32')
-
-logger.debug("\nCentralized Training: dataset {}, Total Round {}, data_per_round {}, batch size {}". format(experiment, epoch_size * int(samples_per_device/batch_size), batch_size, step_size))
-
-# # We add an extra layer at the server-side model
+    size_output_nodes = last_layer_input_size
 # neuron_layer_2nd = 2 * size_hidden_nodes
 
 # size_layer_2nd = (size_hidden_nodes+1)*neuron_layer_2nd
@@ -260,14 +254,16 @@ class client_conv2d_model(nn.Module):
         super(client_conv2d_model, self).__init__()
 
         model_list = []
-        model_list.append(nn.Conv2d(1, 8, kernel_size = 3, stride = 2, bias = False))
+        model_list.append(nn.Conv2d(1, 12, kernel_size = 3, stride = 2, bias = False))
         model_list.append(nn.ReLU())
 
         self.client = nn.Sequential(*model_list)
 
     def forward(self, x):
         # x = x.view(x.size(0), 13, 50)
+        # print(x.shape)
         out = self.client(x)
+        # print(out.shape)
         return out
 
 class server_conv2d_model(nn.Module):
@@ -277,17 +273,17 @@ class server_conv2d_model(nn.Module):
     def __init__(self, num_class = 3, number_hidden = 0, hidden_size = 128, input_size = (50, 13)):
         super(server_conv2d_model, self).__init__()
 
-        last_layer_input_size = input_size
+        # last_layer_input_size = input_size
         model_list = []
-        last_layer_input_size = 800
+        # last_layer_input_size = 800
         # model_list.append(nn.Conv2d(4, 8, kernel_size = 3, stride = 1, bias = False))
         # model_list.append(nn.BatchNorm2d(8))
         # model_list.append(nn.ReLU())
-        model_list.append(nn.Conv2d(8, 16, kernel_size = 3, stride = 2, bias = False))
-        model_list.append(nn.BatchNorm2d(16))
+        model_list.append(nn.Conv2d(12,30, kernel_size = 3, stride = 2, bias = False))
+        model_list.append(nn.BatchNorm2d(30))
         model_list.append(nn.ReLU())
         model_list.append(nn.Flatten(1))
-        last_layer_input_size = 352
+        last_layer_input_size = 660
         for _ in range(number_hidden):
             model_list.append(nn.Linear(last_layer_input_size, hidden_size, bias = True))
             # model_list.append(nn.Dropout(0.25))
