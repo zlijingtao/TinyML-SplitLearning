@@ -1,5 +1,5 @@
-import serial
-from serial.tools.list_ports import comports
+# import serial
+# from serial.tools.list_ports import comports
 
 import struct
 import time
@@ -19,6 +19,8 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 import numpy as np
+# import librosa
+import speechpy
 torch.manual_seed(random_seed)
 torch.cuda.manual_seed(random_seed)
 torch.cuda.manual_seed_all(random_seed)
@@ -640,6 +642,19 @@ def getSamplesIID(batch_size, batch_start_index):
     return input_list_array, label_list_array
 
 
+def raw_to_mfcc(filename):
+        # with open('./datasets/CN_digits/'+filename) as f:
+    with open(f'./datasets/{experiment}/'+filename) as f:
+        data = json.load(f)
+        if 'payload' in data:
+            raw_dt_npy = np.array(data['payload']['values'],dtype=np.float)
+        else:
+            raw_dt_npy = np.array(data['values'],dtype=np.float)
+    padding_ary = np.zeros(320,)
+    raw_dt_npy = np.concatenate((raw_dt_npy,padding_ary))
+    raw_dt_npy=speechpy.processing.preemphasis(raw_dt_npy,cof=0.98, shift=1)
+    mfccs = speechpy.feature.mfcc(raw_dt_npy, frame_stride=0.020,frame_length=0.020,sampling_frequency=16000, fft_length=256, low_frequency=0, num_filters=32)
+    return mfccs
 def getSamplesIIDDigits(batch_size, batch_start_index):
     global digits_silence_files, digits_one_files, digits_two_files, digits_three_files, digits_four_files, digits_five_files, digits_unknown_files
 
@@ -657,49 +672,64 @@ def getSamplesIIDDigits(batch_size, batch_start_index):
         
         filename = digits_silence_files[i]
         num_button = 1
-        input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
-        
-        #
-        # input_array2 = MFCC(filename)
-        # input_array2 == input_array
-        #
-
+        try: 
+            input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        except:
+            input_array = raw_to_mfcc(filename)
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
         
         filename = digits_one_files[i]
         num_button = 2
-        input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        try: 
+            input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        except:
+            input_array = raw_to_mfcc(filename)
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
 
         filename = digits_two_files[i]
         num_button = 3
-        input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        try: 
+            input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        except:
+            input_array = raw_to_mfcc(filename)
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
 
         filename = digits_three_files[i]
         num_button = 4
-        input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        try: 
+            input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        except:
+            input_array = raw_to_mfcc(filename)
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
 
         filename = digits_four_files[i]
         num_button = 5
-        input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        try: 
+            input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        except:
+            input_array = raw_to_mfcc(filename)
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
 
         filename = digits_five_files[i]
         num_button = 6
-        input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        try: 
+            input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        except:
+            input_array = raw_to_mfcc(filename)
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
 
         filename = digits_unknown_files[i]
         num_button = 7
-        input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        try: 
+            input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        except:
+            input_array = raw_to_mfcc(filename)
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
 
