@@ -658,6 +658,11 @@ def getSamplesIIDDigits(batch_size, batch_start_index):
         filename = digits_silence_files[i]
         num_button = 1
         input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        
+        #
+        # input_array2 = MFCC(filename)
+        # input_array2 == input_array
+        #
 
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
