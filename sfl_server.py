@@ -54,14 +54,14 @@ batch_size = 10 # Must be even, hsa to be split into 2 types of samples
 running_batch_accu = 0
 running_batch_accu_list = []
 experiment = 'digits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
-experiment = 'ENdigits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
+experiment = 'EN_digits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
 
 # initialize client-side model
 size_hidden_nodes = 25
 if experiment == "custom":
     size_output_nodes = 5
     samples_per_device = 250 # Amount of samples of each word to send to each device
-elif experiment == 'ENdigits':
+elif experiment == 'EN_digits':
     samples_per_device = 1400 # Amount of samples of each word to send to each device
     size_output_nodes = 7
     batch_size = 14 # Must be even, hsa to be split into 2 types of samples
@@ -188,7 +188,7 @@ if experiment == "digits":
     digits_four_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("four")]
     digits_five_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("five")]
     digits_unknown_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("unknown")]
-elif experiment == "ENdigits":
+elif experiment == "EN_digits":
     digits_silence_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("silence") and int(file.split(".")[1])>=500]
     digits_one_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("one") and int(file.split(".")[1])>=500]
     digits_two_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("two") and int(file.split(".")[1])>=500]
@@ -987,7 +987,7 @@ for epoch in range(epoch_size):
                 thread = threading.Thread(target=sendSamplesIIDCustom, args=(device, deviceIndex, batch_size, batch))
             elif experiment == 'digits':
                 thread = threading.Thread(target=sendSamplesIIDDigits, args=(device, deviceIndex, batch_size, batch))
-            elif experiment == 'ENdigits':
+            elif experiment == 'EN_digits':
                 thread = threading.Thread(target=sendSamplesIIDENDigits, args=(device, deviceIndex, batch_size, batch))
 
             thread.daemon = True

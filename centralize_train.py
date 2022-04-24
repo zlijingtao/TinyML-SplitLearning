@@ -68,7 +68,7 @@ running_batch_accu_list = []
 
 epoch_size = 3 # default = 1
 step_size = 1 # The real batch size
-experiment = 'digits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
+experiment = 'EN_digits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
 # model_type = "fc"
 model_type = "fc"
 
@@ -83,10 +83,15 @@ if experiment == "custom":
     samples_per_device = 250 # Amount of samples of each word to send to each device
     total_samples = 250
 elif experiment == 'digits':
-    samples_per_device = 315 # Amount of samples of each word to send to each device
+    samples_per_device = 1260 # Amount of samples of each word to send to each device
     size_output_nodes = 7
     batch_size = 14 # Must be even, hsa to be split into 2 types of samples
-    total_samples = 350
+    total_samples = 1400
+elif experiment == 'EN_digits':
+    samples_per_device = 1260 # Amount of samples of each word to send to each device
+    size_output_nodes = 7
+    batch_size = 14 # Must be even, hsa to be split into 2 types of samples
+    total_samples = 1400
 else: # mountain datasets
     size_output_nodes = 3
     samples_per_device = 300 # Amount of samples of each word to send to each device
@@ -335,31 +340,32 @@ test_pedraforca_files = [file for file in os.listdir("datasets/test") if file.st
 # digits_five_files_EN = [file for file in os.listdir("datasets/CN_digits") if file.startswith("five") and int(file.split(".")[1])>=500]
 # digits_unknown_files_EN = [file for file in os.listdir("datasets/CN_digits") if file.startswith("unknown") and int(file.split(".")[1])>=500]
 
-digits_silence_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("silence") and int(file.split(".")[1])>=500]
-digits_one_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("one") and int(file.split(".")[1])>=500]
-digits_two_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("two") and int(file.split(".")[1])>=500]
-digits_three_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("three") and int(file.split(".")[1])>=500]
-digits_four_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("four") and int(file.split(".")[1])>=500]
-digits_five_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("five") and int(file.split(".")[1])>=500]
-digits_unknown_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("unknown") and int(file.split(".")[1])>=500]
+# digits_silence_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("silence") and int(file.split(".")[1])>=500]
+# digits_one_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("one") and int(file.split(".")[1])>=500]
+# digits_two_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("two") and int(file.split(".")[1])>=500]
+# digits_three_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("three") and int(file.split(".")[1])>=500]
+# digits_four_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("four") and int(file.split(".")[1])>=500]
+# digits_five_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("five") and int(file.split(".")[1])>=500]
+# digits_unknown_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("unknown") and int(file.split(".")[1])>=500]
 
 
-# digits_silence_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("silence") and int(file.split(".")[1])<500]
-# digits_one_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("one") and int(file.split(".")[1])<500]
-# digits_two_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("two") and int(file.split(".")[1])<500]
-# digits_three_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("three") and int(file.split(".")[1])<500]
-# digits_four_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("four") and int(file.split(".")[1])<500]
-# digits_five_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("five") and int(file.split(".")[1])<500]
-# digits_unknown_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("unknown") and int(file.split(".")[1])<500]
+if experiment == "digits":
+    digits_silence_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("silence") and int(file.split(".")[1])<500]
+    digits_one_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("one") and int(file.split(".")[1])<500]
+    digits_two_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("two") and int(file.split(".")[1])<500]
+    digits_three_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("three") and int(file.split(".")[1])<500]
+    digits_four_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("four") and int(file.split(".")[1])<500]
+    digits_five_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("five") and int(file.split(".")[1])<500]
+    digits_unknown_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("unknown") and int(file.split(".")[1])<500]
 
-
-# digits_silence_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("silence") and int(file.split(".")[1])>=500]
-# digits_one_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("one") and int(file.split(".")[1])>=500]
-# digits_two_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("two") and int(file.split(".")[1])>=500]
-# digits_three_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("three") and int(file.split(".")[1])>=500]
-# digits_four_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("four") and int(file.split(".")[1])>=500]
-# digits_five_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("five") and int(file.split(".")[1])>=500]
-# digits_unknown_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("unknown") and int(file.split(".")[1])>=500]
+if experiment == "EN_digits":
+    digits_silence_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("silence") and int(file.split(".")[1])>=500]
+    digits_one_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("one") and int(file.split(".")[1])>=500]
+    digits_two_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("two") and int(file.split(".")[1])>=500]
+    digits_three_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("three") and int(file.split(".")[1])>=500]
+    digits_four_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("four") and int(file.split(".")[1])>=500]
+    digits_five_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("five") and int(file.split(".")[1])>=500]
+    digits_unknown_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("unknown") and int(file.split(".")[1])>=500]
 
 
 
@@ -655,6 +661,7 @@ def raw_to_mfcc(filename):
     raw_dt_npy=speechpy.processing.preemphasis(raw_dt_npy,cof=0.98, shift=1)
     mfccs = speechpy.feature.mfcc(raw_dt_npy, frame_stride=0.020,frame_length=0.020,sampling_frequency=16000, fft_length=256, low_frequency=0, num_filters=32)
     return mfccs
+
 def getSamplesIIDDigits(batch_size, batch_start_index):
     global digits_silence_files, digits_one_files, digits_two_files, digits_three_files, digits_four_files, digits_five_files, digits_unknown_files
 
@@ -1051,6 +1058,12 @@ def startFL():
         error, accu = server_validate(test_in, test_out)
         logger.debug(f"Validation Accuracy {100 * accu}%\n")
         val_graph.append([error, accu, 0])
+    if experiment == "EN_digits":
+        test_in, test_out = getSamplesIIDDigits(140, 1260)
+
+        error, accu = server_validate(test_in, test_out)
+        logger.debug(f"Validation Accuracy {100 * accu}%\n")
+        val_graph.append([error, accu, 0])
     elif experiment == "iid":
         test_in, test_out = getSamplesIID(60, 300)
 
@@ -1085,7 +1098,9 @@ devices = [0]
 if experiment == 'digits':
     train_in, train_out = getSamplesIIDDigits(samples_per_device, 0)
     test_in, test_out = getSamplesIIDDigits(total_samples - samples_per_device, samples_per_device)
-
+if experiment == 'EN_digits':
+    train_in, train_out = getSamplesIIDDigits(samples_per_device, 0)
+    test_in, test_out = getSamplesIIDDigits(total_samples - samples_per_device, samples_per_device)
 if model_type == "conv1d":
     train_in = np.reshape(train_in, (samples_per_device, 13, 50))
     # train_in = np.reshape(train_in, (samples_per_device, 50, 13)).transpose(0, 2, 1)
