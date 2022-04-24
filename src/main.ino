@@ -139,14 +139,14 @@ void train(int nb, bool only_forward) {
         return;
     }
     // Sending inputs to Server 
-    float* myinput = features_matrix.buffer;
-    for (size_t i = 0; i < 50; i++) {
-        for (size_t j = 0; j < 13; j++) {
-            ei_printf_float(myinput[i*13 + j]);
-            Serial.print(" ");
-        }
-        Serial.print("\r\n");
-    }
+    // float* myinput = features_matrix.buffer;
+    // for (size_t i = 0; i < 50; i++) {
+    //     for (size_t j = 0; j < 13; j++) {
+    //         ei_printf_float(myinput[i*13 + j]);
+    //         Serial.print(" ");
+    //     }
+    //     Serial.print("\r\n");
+    // }
     
 
     myNetwork.forward(features_matrix.buffer);

@@ -637,16 +637,16 @@ def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False
         
 
         #Receive input from client (uncomment corresponding part (line 141) in main.ino)
-        input_list = []
-        for _ in range(50):
-            inputs = device.readline().decode()
-            inputs_converted = convert_string_to_array(inputs)
-            input_list.append(inputs_converted)
-        input_array = np.concatenate(input_list, axis = 0).reshape(1,650)
+        # input_list = []
+        # for _ in range(50):
+        #     inputs = device.readline().decode()
+        #     inputs_converted = convert_string_to_array(inputs)
+        #     input_list.append(inputs_converted)
+        # input_array = np.concatenate(input_list, axis = 0).reshape(1,650)
 
-        if not os.path.isdir("processed_datasets/{}".format(experiment)):
-            os.makedirs("processed_datasets/{}".format(experiment))
-        np.save("processed_datasets/{}/{}.npy".format(experiment, samplePath.split("/")[-1].replace(".json", "")), input_array)
+        # if not os.path.isdir("processed_datasets/{}".format(experiment)):
+        #     os.makedirs("processed_datasets/{}".format(experiment))
+        # np.save("processed_datasets/{}/{}.npy".format(experiment, samplePath.split("/")[-1].replace(".json", "")), input_array)
 
         # Receive activation from client
         outputs = device.readline().decode()
