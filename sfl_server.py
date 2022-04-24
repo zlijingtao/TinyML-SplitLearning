@@ -3,18 +3,30 @@ from serial.tools.list_ports import comports
 
 import struct
 import time
-import numpy as np
 import matplotlib.pyplot as plt
 import threading
 import time
 import json
 import os
 import random
+import logging
+import sys
+
+random_seed=1234
 import torch
 import torch.nn as nn
 import torch.nn.init as init
-import logging
-import sys
+import numpy as np
+# import librosa
+import speechpy
+torch.manual_seed(random_seed)
+torch.cuda.manual_seed(random_seed)
+torch.cuda.manual_seed_all(random_seed)
+np.random.seed(random_seed)
+random.seed(random_seed)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+
 formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
 
 def setup_logger(name, log_file, level=logging.INFO, console_out = True):
@@ -54,10 +66,10 @@ batch_size = 10 # Must be even, hsa to be split into 2 types of samples
 running_batch_accu = 0
 running_batch_accu_list = []
 experiment = 'digits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
-experiment = 'EN_digits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
+# experiment = 'EN_digits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
 
 # initialize client-side model
-size_hidden_nodes = 25
+size_hidden_nodes = 1152
 if experiment == "custom":
     size_output_nodes = 5
     samples_per_device = 250 # Amount of samples of each word to send to each device
@@ -66,15 +78,15 @@ elif experiment == 'EN_digits':
     size_output_nodes = 7
     batch_size = 14 # Must be even, hsa to be split into 2 types of samples
 elif experiment == 'digits':
-    samples_per_device = 630 # Amount of samples of each word to send to each device
+    samples_per_device = 315 # Amount of samples of each word to send to each device
     size_output_nodes = 7
     batch_size = 14 # Must be even, hsa to be split into 2 types of samples
 else: # mountain datasets
     size_output_nodes = 3
     samples_per_device = 300 # Amount of samples of each word to send to each device
 
-size_hidden_layer = (650+1)*size_hidden_nodes
-hidden_layer = (np.random.normal(size=(size_hidden_layer, )) * np.sqrt(2./650)).astype('float32')
+size_hidden_layer = 72
+hidden_layer = (np.random.normal(size=(size_hidden_layer, )) * np.sqrt(2./72)).astype('float32')
 
 logger.debug("\nTraining Setting: dataset {}, Total Round {}, data_per_round {}". format(experiment, epoch_size * int(samples_per_device/batch_size), batch_size))
 
@@ -92,10 +104,10 @@ size_output_layer = (size_hidden_nodes+1)*size_output_nodes # why we need one mo
 output_layer = np.random.uniform(-0.5, 0.5, size_output_layer).astype('float32')
 output_weight_updates  = np.zeros_like(output_layer)
 
-momentum = 0.7
-learningRate= 0.01
-number_hidden = 0
-hidden_size = 64
+momentum = 0.6
+learningRate= 0.005
+number_hidden = 1
+hidden_size = 128
 
 logger.debug("Model Setting: momentum {}, lr {}, number_hidden {}, hidden_size {}". format(momentum, learningRate, number_hidden, hidden_size))
 
@@ -120,7 +132,7 @@ class client_model(nn.Module):
 
         model_list = []
         
-        model_list.append(nn.Linear(650, size_hidden_nodes, bias = True))
+        model_list.append(nn.Conv2d(1, 8, 3, 2, bias = False))
         model_list.append(nn.ReLU())
 
         self.client = nn.Sequential(*model_list)
@@ -156,13 +168,47 @@ class server_model(nn.Module):
         out = self.server(x)
         return out
 
+class server_conv2d_model(nn.Module):
+    '''
+    VGG model 
+    '''
+    def __init__(self, num_class = 3, number_hidden = 0, hidden_size = 128, input_size = (13, 50)):
+        super(server_conv2d_model, self).__init__()
 
-s_model = server_model(num_class = size_output_nodes, number_hidden = number_hidden, hidden_size = hidden_size, input_size = size_hidden_nodes)
+        last_layer_input_size = input_size
+        model_list = []
+        last_layer_input_size = 800
+        # model_list.append(nn.Conv2d(4, 8, kernel_size = 3, stride = 1, bias = False))
+        # model_list.append(nn.BatchNorm2d(8))
+        # model_list.append(nn.ReLU())
+        model_list.append(nn.Conv2d(8, 16, kernel_size = 3, stride = 2, bias = False))
+        model_list.append(nn.BatchNorm2d(16))
+        model_list.append(nn.ReLU())
+        model_list.append(nn.Flatten(1))
+        last_layer_input_size = 352
+        for _ in range(number_hidden):
+            model_list.append(nn.Linear(last_layer_input_size, hidden_size, bias = True))
+            # model_list.append(nn.Dropout(0.25))
+            model_list.append(nn.ReLU())
+            last_layer_input_size = hidden_size
+        
+        model_list.append(nn.Linear(last_layer_input_size, num_class, bias = True))
+
+        self.server = nn.Sequential(*model_list)
+
+        print("server:")
+        print(self.server)
+    def forward(self, x):
+        out = self.server(x)
+        return out
+
+s_model = server_conv2d_model(num_class = size_output_nodes, number_hidden = number_hidden, hidden_size = hidden_size, input_size = size_hidden_nodes)
 s_model.apply(init_weights)
 c_model = client_model()
 # print(c_model.state_dict())
-c_model.load_state_dict({'client.0.weight': torch.tensor(hidden_layer[:size_hidden_nodes*650]).view(650, size_hidden_nodes).t().float(), 'client.0.bias': torch.tensor(hidden_layer[size_hidden_nodes*650:]).float()})
+c_model.load_state_dict({'client.0.weight': torch.tensor(hidden_layer).view(8,1,3,3).float()})
 s_optimizer = torch.optim.SGD(list(s_model.parameters()), lr=learningRate, momentum=momentum, weight_decay=5e-4)
+c_optimizer = torch.optim.SGD(list(c_model.parameters()), lr=learningRate, momentum=momentum, weight_decay=5e-4)
 # s_optimizer = torch.optim.Adam(list(s_model.parameters()), lr=learningRate)
 
 
@@ -181,13 +227,13 @@ test_montserrat_files = [file for file in os.listdir("datasets/test/") if file.s
 test_pedraforca_files = [file for file in os.listdir("datasets/test") if file.startswith("pedraforca")]
 
 if experiment == "digits":
-    digits_silence_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("silence")]
-    digits_one_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("one")]
-    digits_two_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("two")]
-    digits_three_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("three")]
-    digits_four_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("four")]
-    digits_five_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("five")]
-    digits_unknown_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("unknown")]
+    digits_silence_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("silence") and int(file.split(".")[1])<500]
+    digits_one_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("one") and int(file.split(".")[1])<500]
+    digits_two_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("two") and int(file.split(".")[1])<500]
+    digits_three_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("three") and int(file.split(".")[1])<500]
+    digits_four_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("four") and int(file.split(".")[1])<500]
+    digits_five_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("five") and int(file.split(".")[1])<500]
+    digits_unknown_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("unknown") and int(file.split(".")[1])<500]
 elif experiment == "EN_digits":
     digits_silence_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("silence") and int(file.split(".")[1])>=500]
     digits_one_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("one") and int(file.split(".")[1])>=500]
@@ -231,7 +277,7 @@ def convert_string_to_array(string, one_hot = False):
 
 def server_compute(Hidden, target, only_forward = False):
     input = torch.tensor(Hidden, requires_grad=True).float()
-    label = torch.argmax(torch.from_numpy(target).float())
+    label = torch.argmax(torch.from_numpy(target).float()).view(1,)
     s_model.train()
     s_optimizer.zero_grad()
     
@@ -662,9 +708,11 @@ def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False
 
             # Perform server-side computation (forward/backward)
             hidden_activation = convert_string_to_array(outputs)
+            hidden_activation = hidden_activation.reshape(1,6,24,8).transpose(0, 3, 1, 2)
             label = convert_string_to_array(str(nb), one_hot = True)
             forward_accu, forward_error, error_array = server_compute(hidden_activation, label, only_forward= False)
             
+            error_array = error_array.flatten()
             # Send Error Array to client to continue backward #TODO: implement this
             for i in range(size_hidden_nodes): # hidden layer
                 d.read() # wait until confirmatio
@@ -677,7 +725,7 @@ def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False
         ne = device.readline()[:-2]
 
         n_epooch = int(ne)
-        running_batch_accu += forward_accu
+        running_batch_accu += forward_accu[0]
         graph.append([n_epooch, forward_error, deviceIndex])
 
 def sendTestSamples(device, deviceIndex):
@@ -894,11 +942,11 @@ def startFL():
         output_layer = np.average(devices_output_layer, axis=0, weights=devices_num_epochs)
 
     # Doing validation
-    c_model.load_state_dict({'client.0.weight': torch.tensor(hidden_layer[:size_hidden_nodes*650]).view(650, size_hidden_nodes).t().float(), 'client.0.bias': torch.tensor(hidden_layer[size_hidden_nodes*650:]).float()})
-    
-    if experiment == "digits":
-        test_in, test_out = getSamplesIIDDigits(70, 630)
+    c_model.load_state_dict({'client.0.weight': torch.tensor(hidden_layer).view(8,1,3,3).float()})
 
+    if experiment == "digits":
+        test_in, test_out = getSamplesIIDDigits(35, 315)
+        test_in = np.reshape(test_in, (35, 1, 13, 50))
         error, accu = server_validate(test_in, test_out)
         logger.debug(f"Validation Accuracy {100 * accu}%\n")
         val_graph.append([error, accu, 0])
@@ -944,7 +992,7 @@ try:
     devices = [serial.Serial('/dev/ttyACM0', 9600)]
 except:
     print("Access alternative port")
-    devices = [serial.Serial('/dev/ttyACM1', 9600)]
+    devices = [serial.Serial('COM7', 9600)]
 devices_connected = devices
 
 

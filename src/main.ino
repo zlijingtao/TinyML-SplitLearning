@@ -92,7 +92,7 @@ void init_network_model() {
     myNetwork.initWeights();
 
     char* myHiddenWeights = (char*) myNetwork.get_HiddenWeights();
-    for (uint16_t i = 0; i < (InputNodes+1) * HiddenNodes; ++i) {
+    for (uint16_t i = 0; i < NFilter * 9; ++i) {
         Serial.write('n');
         while(Serial.available() < 4) {}
         for (int n = 0; n < 4; n++) {
@@ -153,7 +153,7 @@ void train(int nb, bool only_forward) {
 
     // Sending activation/label to Server 
     float* myOutput = myNetwork.get_output();
-    for (size_t i = 0; i < 25; i++) {
+    for (size_t i = 0; i < HiddenNodes; i++) {
         ei_printf_float(myOutput[i]);
         Serial.print(" ");
     }
@@ -327,7 +327,7 @@ void loop() {
                 // Sending hidden layer
                 // char* myHiddenWeights = (char*) myNetwork.get_HiddenWeights();
                 char* myHiddenWeights = (char*) myNetwork.get_HiddenWeights();
-                for (uint16_t i = 0; i < (InputNodes+1) * HiddenNodes; ++i) {
+                for (uint16_t i = 0; i < NFilter * 9; ++i) {
                     Serial.write(myHiddenWeights+i*sizeof(float), sizeof(float));
                 }
 
@@ -341,7 +341,7 @@ void loop() {
                  * Receiving model
                  *****/
                 // Receiving hidden layer
-                for (uint16_t i = 0; i < (InputNodes+1) * HiddenNodes; ++i) {
+                for (uint16_t i = 0; i < NFilter * 9; ++i) {
                     Serial.write('n');
                     while(Serial.available() < 4) {}
                     for (int n = 0; n < 4; n++) {
