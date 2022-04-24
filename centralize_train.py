@@ -66,16 +66,30 @@ running_batch_accu = 0
 running_batch_accu_list = []
 
 
-epoch_size = 30 # default = 1
-step_size = 7 # The real batch size
+epoch_size = 3 # default = 1
+step_size = 1 # The real batch size
 experiment = 'EN_digits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
 # model_type = "fc"
-model_type = "conv2d"
+model_type = "conv1d"
 
-momentum = 0.7
+momentum = 0.6
 learningRate= 0.005
-number_hidden = 0
+number_hidden = 1
 hidden_size = 128
+
+if model_type == "fc" and experiment == "EN_digits":
+    momentum = 0.7
+    learningRate= 0.0005
+    number_hidden = 0
+    hidden_size = 128
+
+if model_type == "conv2d" and experiment == "EN_digits":
+    momentum = 0.6
+    learningRate= 0.005
+    number_hidden = 1
+    hidden_size = 128
+
+
 # initialize client-side model
 size_hidden_nodes = 25
 if experiment == "custom":
@@ -193,7 +207,7 @@ class client_conv_model(nn.Module):
         super(client_conv_model, self).__init__()
 
         model_list = []
-        model_list.append(nn.Conv1d(13, 4, kernel_size = 3, padding="same"))
+        model_list.append(nn.Conv1d(13, 16, kernel_size = 5, padding="same"))
         model_list.append(nn.ReLU())
 
         self.client = nn.Sequential(*model_list)
@@ -213,14 +227,14 @@ class server_conv_model(nn.Module):
         last_layer_input_size = input_size
         model_list = []
         last_layer_input_size = 800
-        model_list.append(nn.Conv1d(4, 8, kernel_size = 3, padding="same"))
+        model_list.append(nn.Conv1d(16, 8, kernel_size = 5, padding="same"))
         model_list.append(nn.BatchNorm1d(8))
         model_list.append(nn.ReLU())
-        model_list.append(nn.Conv1d(8, 4, kernel_size = 3, padding="same"))
-        model_list.append(nn.BatchNorm1d(4))
-        model_list.append(nn.ReLU())
+        # model_list.append(nn.Conv1d(8, 4, kernel_size = 3, padding="same"))
+        # model_list.append(nn.BatchNorm1d(4))
+        # model_list.append(nn.ReLU())
         model_list.append(nn.Flatten(1))
-        last_layer_input_size = 200
+        last_layer_input_size = 400
         for _ in range(number_hidden):
             model_list.append(nn.Linear(last_layer_input_size, hidden_size, bias = True))
             # model_list.append(nn.Dropout(0.5))
