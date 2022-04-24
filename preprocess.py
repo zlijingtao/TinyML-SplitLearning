@@ -23,7 +23,7 @@ word_name_list = ['_background_noise_']
 for word in word_name_list:
     search_path = os.path.join(f'dataset/{word}', '*.wav')
     counter = 0
-    while counter < 200:
+    while counter < 1000:
         for ogg_path in glob.glob(search_path):
 
             file_name = ogg_path.split('/')[-1]
@@ -41,13 +41,13 @@ for word in word_name_list:
                 counter += 1
                 with open(f'{output_path}/silence.{500+counter}.json', 'w') as f:
                     json.dump(data, f)
-            if counter == 200:
+            if counter == 1000:
                 break
 
 
 word_name_list = ['no', 'off', 'marvin', 'follow', 'cat', 'house', 'learn', 'sheila', 'visual', 'zero']
 counter = 0
-while counter < 200:
+while counter < 1000:
     for word in word_name_list:
         search_path = os.path.join(f'dataset/{word}', '*.wav')
         
@@ -61,7 +61,7 @@ while counter < 200:
             print(f"add {ogg_path}")
             with open(f'{output_path}/unknown.{500+counter}.json', 'w') as f:
                 json.dump(data, f)
-        if counter == 200:
+        if counter == 1000:
             break
 
 word_name_list = ['one', 'two', 'three', 'four', 'five']
@@ -80,5 +80,5 @@ for word in word_name_list:
             counter += 1
             with open(f'{output_path}/{word}.{500+counter}.json', 'w') as f:
                 json.dump(data, f)
-        if counter == 200:
+        if counter == 1000:
             break

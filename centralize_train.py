@@ -66,14 +66,14 @@ running_batch_accu = 0
 running_batch_accu_list = []
 
 
-epoch_size = 3 # default = 1
-step_size = 1 # The real batch size
+epoch_size = 30 # default = 1
+step_size = 7 # The real batch size
 experiment = 'EN_digits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
 # model_type = "fc"
-model_type = "fc"
+model_type = "conv2d"
 
-momentum = 0.6
-learningRate= 0.01
+momentum = 0.7
+learningRate= 0.005
 number_hidden = 0
 hidden_size = 128
 # initialize client-side model
@@ -88,10 +88,10 @@ elif experiment == 'digits':
     batch_size = 14 # Must be even, hsa to be split into 2 types of samples
     total_samples = 1400
 elif experiment == 'EN_digits':
-    samples_per_device = 1260 # Amount of samples of each word to send to each device
+    samples_per_device = 6300 # Amount of samples of each word to send to each device
     size_output_nodes = 7
     batch_size = 14 # Must be even, hsa to be split into 2 types of samples
-    total_samples = 1400
+    total_samples = 7000
 else: # mountain datasets
     size_output_nodes = 3
     samples_per_device = 300 # Amount of samples of each word to send to each device
@@ -246,7 +246,7 @@ class client_conv2d_model(nn.Module):
         super(client_conv2d_model, self).__init__()
 
         model_list = []
-        model_list.append(nn.Conv2d(1, 4, kernel_size = 3, stride = 2, bias = False))
+        model_list.append(nn.Conv2d(1, 8, kernel_size = 3, stride = 2, bias = False))
         model_list.append(nn.ReLU())
 
         self.client = nn.Sequential(*model_list)
@@ -269,7 +269,7 @@ class server_conv2d_model(nn.Module):
         # model_list.append(nn.Conv2d(4, 8, kernel_size = 3, stride = 1, bias = False))
         # model_list.append(nn.BatchNorm2d(8))
         # model_list.append(nn.ReLU())
-        model_list.append(nn.Conv2d(4, 16, kernel_size = 3, stride = 2, bias = False))
+        model_list.append(nn.Conv2d(8, 16, kernel_size = 3, stride = 2, bias = False))
         model_list.append(nn.BatchNorm2d(16))
         model_list.append(nn.ReLU())
         model_list.append(nn.Flatten(1))
@@ -682,7 +682,7 @@ def getSamplesIIDDigits(batch_size, batch_start_index):
         try: 
             input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
         except:
-            input_array = raw_to_mfcc(filename)
+            input_array = raw_to_mfcc(filename).flatten()
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
         
@@ -691,7 +691,7 @@ def getSamplesIIDDigits(batch_size, batch_start_index):
         try: 
             input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
         except:
-            input_array = raw_to_mfcc(filename)
+            input_array = raw_to_mfcc(filename).flatten()
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
 
@@ -700,7 +700,7 @@ def getSamplesIIDDigits(batch_size, batch_start_index):
         try: 
             input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
         except:
-            input_array = raw_to_mfcc(filename)
+            input_array = raw_to_mfcc(filename).flatten()
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
 
@@ -709,7 +709,7 @@ def getSamplesIIDDigits(batch_size, batch_start_index):
         try: 
             input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
         except:
-            input_array = raw_to_mfcc(filename)
+            input_array = raw_to_mfcc(filename).flatten()
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
 
@@ -718,7 +718,7 @@ def getSamplesIIDDigits(batch_size, batch_start_index):
         try: 
             input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
         except:
-            input_array = raw_to_mfcc(filename)
+            input_array = raw_to_mfcc(filename).flatten()
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
 
@@ -727,7 +727,7 @@ def getSamplesIIDDigits(batch_size, batch_start_index):
         try: 
             input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
         except:
-            input_array = raw_to_mfcc(filename)
+            input_array = raw_to_mfcc(filename).flatten()
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
 
@@ -736,7 +736,7 @@ def getSamplesIIDDigits(batch_size, batch_start_index):
         try: 
             input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
         except:
-            input_array = raw_to_mfcc(filename)
+            input_array = raw_to_mfcc(filename).flatten()
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
 
@@ -1049,28 +1049,6 @@ def startFL():
         hidden_layer = np.average(devices_hidden_layer, axis=0, weights=devices_num_epochs)
         output_layer = np.average(devices_output_layer, axis=0, weights=devices_num_epochs)
 
-    # Doing validation
-    c_model.load_state_dict({'client.0.weight': torch.tensor(hidden_layer[:size_hidden_nodes*650]).view(650, size_hidden_nodes).t().float(), 'client.0.bias': torch.tensor(hidden_layer[size_hidden_nodes*650:]).float()})
-    
-    if experiment == "digits":
-        test_in, test_out = getSamplesIIDDigits(70, 630)
-
-        error, accu = server_validate(test_in, test_out)
-        logger.debug(f"Validation Accuracy {100 * accu}%\n")
-        val_graph.append([error, accu, 0])
-    if experiment == "EN_digits":
-        test_in, test_out = getSamplesIIDDigits(140, 1260)
-
-        error, accu = server_validate(test_in, test_out)
-        logger.debug(f"Validation Accuracy {100 * accu}%\n")
-        val_graph.append([error, accu, 0])
-    elif experiment == "iid":
-        test_in, test_out = getSamplesIID(60, 300)
-
-        error, accu = server_validate(test_in, test_out)
-        logger.debug(f"Validation Accuracy {100 * accu}%\n")
-        val_graph.append([error, accu, 0])
-
     #################
     # Sending models
     #################
@@ -1101,7 +1079,11 @@ if experiment == 'digits':
 if experiment == 'EN_digits':
     train_in, train_out = getSamplesIIDDigits(samples_per_device, 0)
     test_in, test_out = getSamplesIIDDigits(total_samples - samples_per_device, samples_per_device)
-if model_type == "conv1d":
+
+if model_type == "fc":
+    train_in = np.reshape(train_in, (samples_per_device, 650))
+    test_in = np.reshape(test_in, (total_samples - samples_per_device, 650))
+elif model_type == "conv1d":
     train_in = np.reshape(train_in, (samples_per_device, 13, 50))
     # train_in = np.reshape(train_in, (samples_per_device, 50, 13)).transpose(0, 2, 1)
     test_in = np.reshape(test_in, (total_samples - samples_per_device, 13, 50))
