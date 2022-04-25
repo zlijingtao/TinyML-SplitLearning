@@ -29,6 +29,8 @@ random.seed(random_seed)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
+from pytorch_to_tensorflow_lite import pytorch2tflite
+
 formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
 
 def setup_logger(name, log_file, level=logging.INFO, console_out = True):
@@ -66,7 +68,7 @@ running_batch_accu = 0
 running_batch_accu_list = []
 
 
-epoch_size = 3 # default = 1
+epoch_size = 1 # 3,default = 1
 step_size = 1 # The real batch size
 experiment = 'EN_digits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
 # model_type = "fc"
@@ -88,7 +90,7 @@ if model_type == "conv2d" and experiment == "EN_digits":
     momentum = 0.6
     learningRate= 0.005
     number_hidden = 1
-    hidden_size = 256 #128
+    hidden_size = 128 #256, 128
     #TODO: change
     
 
@@ -1147,6 +1149,14 @@ for epoch in range(epoch_size):
         
 train_time = time.time() - init_time
 
+#%% save model
+torch.save(c_model.state_dict(),'c_model.pth')
+torch.save(s_model.state_dict(),'s_model.pth')
+#%% transfer to tflite model
+pytorch2tflite('c_model.pth','c_model')
+pytorch2tflite('s_model.pth','s_model')
+
+exit()
 plt.figure(1)
 plt.ion()
 plt.show()
