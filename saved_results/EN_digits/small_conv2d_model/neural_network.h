@@ -9,7 +9,7 @@
 static const int InputNodes = 650;
 static const int n_H_prev = 13;
 static const int n_W_prev = 50;
-static const int NFilter = 12;
+static const int NFilter = 8;
 static const int Stride = 2;
 static const int n_H = (n_H_prev - 3) / Stride + 1;
 static const int n_W = (n_W_prev - 3) / Stride + 1;

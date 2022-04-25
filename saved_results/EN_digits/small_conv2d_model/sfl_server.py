@@ -17,7 +17,6 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 import numpy as np
-from models import server_conv2d_model, server_model, client_conv2d_model, client_model
 # import librosa
 from third_party_package import speechpy
 torch.manual_seed(random_seed)
@@ -73,7 +72,7 @@ num_simulated_clients = 8
 num_devices = 2
 
 # initialize client-side model
-size_hidden_nodes = 1728
+size_hidden_nodes = 1152
 if experiment == "custom":
     size_output_nodes = 5
     samples_per_device = 250 # Amount of samples of each word to send to each device
@@ -89,7 +88,7 @@ else: # mountain datasets
     size_output_nodes = 3
     samples_per_device = 300 # Amount of samples of each word to send to each device
 
-NFilter = 12
+NFilter = 8
 size_hidden_layer = NFilter * 9
 hidden_layer = (np.random.normal(size=(size_hidden_layer, )) * np.sqrt(2./size_hidden_layer)).astype('float32')
 
@@ -100,10 +99,10 @@ size_output_layer = (size_hidden_nodes+1)*size_output_nodes # why we need one mo
 output_layer = np.random.uniform(-0.5, 0.5, size_output_layer).astype('float32')
 output_weight_updates  = np.zeros_like(output_layer)
 
-momentum = 0.5
+momentum = 0.6
 learningRate= 0.005
 number_hidden = 1
-hidden_size = 256 #256, 128
+hidden_size = 128
 
 logger.debug("Model Setting: momentum {}, lr {}, number_hidden {}, hidden_size {}". format(momentum, learningRate, number_hidden, hidden_size))
 max_accu = 0
@@ -123,11 +122,90 @@ def init_weights(m):
         m.bias.data.zero_()
 
 
+class client_model(nn.Module):
+    '''
+    VGG model 
+    '''
+    def __init__(self):
+        super(client_model, self).__init__()
+
+        model_list = []
+        
+        model_list.append(nn.Conv2d(1, 8, 3, 2, bias = False))
+        model_list.append(nn.ReLU())
+
+        self.client = nn.Sequential(*model_list)
+
+    def forward(self, x):
+        out = self.client(x)
+        return out
+
+
+class server_model(nn.Module):
+    '''
+    VGG model 
+    '''
+    def __init__(self, num_class = 3, number_hidden = 1, hidden_size = 128, input_size = 25):
+        super(server_model, self).__init__()
+
+        last_layer_input_size = input_size
+        model_list = []
+
+        for _ in range(number_hidden):
+            model_list.append(nn.Linear(last_layer_input_size, hidden_size, bias = True))
+            model_list.append(nn.ReLU())
+            last_layer_input_size = hidden_size
+        
+        model_list.append(nn.Linear(last_layer_input_size, num_class, bias = True))
+        # model_list.append(nn.Sigmoid())
+
+        self.server = nn.Sequential(*model_list)
+
+        logger.debug("server:")
+        logger.debug(str(self.server))
+    def forward(self, x):
+        out = self.server(x)
+        return out
+
+class server_conv2d_model(nn.Module):
+    '''
+    VGG model 
+    '''
+    def __init__(self, num_class = 3, number_hidden = 0, hidden_size = 128, input_size = (13, 50)):
+        super(server_conv2d_model, self).__init__()
+
+        last_layer_input_size = input_size
+        model_list = []
+        last_layer_input_size = 800
+        # model_list.append(nn.Conv2d(4, 8, kernel_size = 3, stride = 1, bias = False))
+        # model_list.append(nn.BatchNorm2d(8))
+        # model_list.append(nn.ReLU())
+        model_list.append(nn.Conv2d(8, 16, kernel_size = 3, stride = 2, bias = False))
+        model_list.append(nn.BatchNorm2d(16))
+        model_list.append(nn.ReLU())
+        model_list.append(nn.Flatten(1))
+        last_layer_input_size = 352
+        for _ in range(number_hidden):
+            model_list.append(nn.Linear(last_layer_input_size, hidden_size, bias = True))
+            # model_list.append(nn.Dropout(0.25))
+            model_list.append(nn.ReLU())
+            last_layer_input_size = hidden_size
+        
+        model_list.append(nn.Linear(last_layer_input_size, num_class, bias = True))
+
+        self.server = nn.Sequential(*model_list)
+
+        print("server:")
+        print(self.server)
+    def forward(self, x):
+        out = self.server(x)
+        return out
+
 s_model = server_conv2d_model(num_class = size_output_nodes, number_hidden = number_hidden, hidden_size = hidden_size, input_size = size_hidden_nodes)
 s_model.apply(init_weights)
-c_model = client_conv2d_model()
+c_model = client_model()
 # print(c_model.state_dict())
-c_model.load_state_dict({'client.0.weight': torch.tensor(hidden_layer).view(NFilter,1,3,3).float()})
+c_model.load_state_dict({'client.0.weight': torch.tensor(hidden_layer).view(8,1,3,3).float()})
 s_optimizer = torch.optim.SGD(list(s_model.parameters()), lr=learningRate, momentum=momentum, weight_decay=5e-4)
 c_optimizer = torch.optim.SGD(list(c_model.parameters()), lr=learningRate, momentum=momentum, weight_decay=5e-4)
 
@@ -136,9 +214,9 @@ if num_simulated_clients > 0:
     list_simu_c_model = []
     list_simu_c_optimizer = []
     for i in range(num_simulated_clients):
-        simu_c_model = client_conv2d_model()
+        simu_c_model = client_model()
         list_simu_c_model.append(copy.deepcopy(simu_c_model))
-        list_simu_c_model[i].load_state_dict({'client.0.weight': torch.tensor(hidden_layer).view(NFilter,1,3,3).float()})
+        list_simu_c_model[i].load_state_dict({'client.0.weight': torch.tensor(hidden_layer).view(8,1,3,3).float()})
         list_simu_c_optimizer.append(torch.optim.SGD(list(list_simu_c_model[i].parameters()), lr=learningRate, momentum=momentum, weight_decay=5e-4))
 # s_optimizer = torch.optim.Adam(list(s_model.parameters()), lr=learningRate)
 
@@ -531,9 +609,9 @@ def raw_to_mfcc(filename):
     with open(f'./datasets/{experiment}/'+filename) as f:
         data = json.load(f)
         if 'payload' in data:
-            raw_dt_npy = np.array(data['payload']['values'],dtype=float)
+            raw_dt_npy = np.array(data['payload']['values'],dtype=np.float)
         else:
-            raw_dt_npy = np.array(data['values'],dtype=float)
+            raw_dt_npy = np.array(data['values'],dtype=np.float)
     #add padding
     # padding_ary = np.zeros(320,)
     # raw_dt_npy = np.concatenate((raw_dt_npy,padding_ary))
@@ -702,7 +780,7 @@ def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False
 
             # Perform server-side computation (forward/backward)
             hidden_activation = convert_string_to_array(outputs)
-            hidden_activation = hidden_activation.reshape(1,6,24,NFilter).transpose(0, 3, 1, 2)
+            hidden_activation = hidden_activation.reshape(1,6,24,8).transpose(0, 3, 1, 2)
             label = convert_string_to_array(str(nb), one_hot = True)
             forward_accu, forward_error, error_array = server_compute(hidden_activation, label, only_forward= False)
             
@@ -943,7 +1021,7 @@ def startFL():
         output_layer = np.average(devices_output_layer, axis=0)
 
     # Doing validation
-    c_model.load_state_dict({'client.0.weight': torch.tensor(hidden_layer).view(NFilter,1,3,3).float()})
+    c_model.load_state_dict({'client.0.weight': torch.tensor(hidden_layer).view(8,1,3,3).float()})
 
     if experiment == "digits":
         test_in, test_out = getSamplesIIDDigits(35, 315)
@@ -984,7 +1062,7 @@ def startFL():
 
     if num_simulated_clients > 0:
         for i in range(num_simulated_clients):
-            list_simu_c_model[i].load_state_dict({'client.0.weight': torch.tensor(hidden_layer).view(NFilter,1,3,3).float()})
+            list_simu_c_model[i].load_state_dict({'client.0.weight': torch.tensor(hidden_layer).view(8,1,3,3).float()})
 
     pauseListen = False
 

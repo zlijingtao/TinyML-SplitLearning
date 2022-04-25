@@ -20,7 +20,9 @@ import torch.nn as nn
 import torch.nn.init as init
 import numpy as np
 # import librosa
-from third_party import speechpy
+from third_party_package import speechpy
+from models import server_conv2d_model, server_conv_model, server_model, client_conv2d_model, client_conv_model, client_model
+
 torch.manual_seed(random_seed)
 torch.cuda.manual_seed(random_seed)
 torch.cuda.manual_seed_all(random_seed)
@@ -29,7 +31,7 @@ random.seed(random_seed)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-from pytorch_to_tensorflow_lite import pytorch2tflite
+# from pytorch_to_tensorflow_lite import pytorch2tflite
 
 formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
 
@@ -68,7 +70,7 @@ running_batch_accu = 0
 running_batch_accu_list = []
 
 
-epoch_size = 1 # 3,default = 1
+epoch_size = 3 # 3,default = 1
 step_size = 1 # The real batch size
 experiment = 'EN_digits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
 # model_type = "fc"
@@ -87,10 +89,10 @@ if model_type == "fc" and experiment == "EN_digits":
 
 if model_type == "conv2d" and experiment == "EN_digits":
     #best
-    momentum = 0.6
+    momentum = 0.5
     learningRate= 0.005
     number_hidden = 1
-    hidden_size = 128 #256, 128
+    hidden_size = 256 #256, 128
     #TODO: change
     
 
@@ -150,157 +152,6 @@ def init_weights(m):
 #         torch.nn.init.uniform_(m.weight, a = -0.5, b = 0.5)
 #         torch.nn.init.uniform_(m.bias, a = -0.5, b = 0.5)
 
-class client_model(nn.Module):
-    '''
-    VGG model 
-    '''
-    def __init__(self):
-        super(client_model, self).__init__()
-
-        model_list = []
-        
-        model_list.append(nn.Linear(650, size_hidden_nodes, bias = True))
-        model_list.append(nn.ReLU())
-
-        self.client = nn.Sequential(*model_list)
-
-    def forward(self, x):
-        out = self.client(x)
-        return out
-
-
-class server_model(nn.Module):
-    '''
-    VGG model 
-    '''
-    def __init__(self, num_class = 3, number_hidden = 1, hidden_size = 128, input_size = 25):
-        super(server_model, self).__init__()
-
-        last_layer_input_size = input_size
-        model_list = []
-
-        for _ in range(number_hidden):
-            model_list.append(nn.Linear(last_layer_input_size, hidden_size, bias = True))
-            model_list.append(nn.ReLU())
-            last_layer_input_size = hidden_size
-        
-        model_list.append(nn.Linear(last_layer_input_size, num_class, bias = True))
-        # model_list.append(nn.Sigmoid())
-
-        self.server = nn.Sequential(*model_list)
-
-        logger.debug("server:")
-        logger.debug(str(self.server))
-    def forward(self, x):
-        out = self.server(x)
-        return out
-
-class client_conv_model(nn.Module):
-    '''
-    VGG model 
-    '''
-    def __init__(self):
-        super(client_conv_model, self).__init__()
-
-        model_list = []
-        model_list.append(nn.Conv1d(13, 16, kernel_size = 5, padding="same"))
-        model_list.append(nn.ReLU())
-
-        self.client = nn.Sequential(*model_list)
-
-    def forward(self, x):
-        # x = x.view(x.size(0), 13, 50)
-        out = self.client(x)
-        return out
-
-class server_conv_model(nn.Module):
-    '''
-    VGG model 
-    '''
-    def __init__(self, num_class = 3, number_hidden = 0, hidden_size = 128, input_size = (50, 13)):
-        super(server_conv_model, self).__init__()
-
-        last_layer_input_size = input_size
-        model_list = []
-        last_layer_input_size = 800
-        model_list.append(nn.Conv1d(16, 8, kernel_size = 5, padding="same"))
-        model_list.append(nn.BatchNorm1d(8))
-        model_list.append(nn.ReLU())
-        # model_list.append(nn.Conv1d(8, 4, kernel_size = 3, padding="same"))
-        # model_list.append(nn.BatchNorm1d(4))
-        # model_list.append(nn.ReLU())
-        model_list.append(nn.Flatten(1))
-        last_layer_input_size = 400
-        for _ in range(number_hidden):
-            model_list.append(nn.Linear(last_layer_input_size, hidden_size, bias = True))
-            # model_list.append(nn.Dropout(0.5))
-            model_list.append(nn.ReLU())
-            last_layer_input_size = hidden_size
-        
-        model_list.append(nn.Linear(last_layer_input_size, num_class, bias = True))
-
-        self.server = nn.Sequential(*model_list)
-
-        print("server:")
-        print(self.server)
-    def forward(self, x):
-        out = self.server(x)
-        return out
-
-
-class client_conv2d_model(nn.Module):
-    '''
-    VGG model 
-    '''
-    def __init__(self):
-        super(client_conv2d_model, self).__init__()
-
-        model_list = []
-        model_list.append(nn.Conv2d(1, 12, kernel_size = 3, stride = 2, bias = False))
-        model_list.append(nn.ReLU())
-
-        self.client = nn.Sequential(*model_list)
-
-    def forward(self, x):
-        # x = x.view(x.size(0), 13, 50)
-        # print(x.shape)
-        out = self.client(x)
-        # print(out.shape)
-        return out
-
-class server_conv2d_model(nn.Module):
-    '''
-    VGG model 
-    '''
-    def __init__(self, num_class = 3, number_hidden = 0, hidden_size = 128, input_size = (50, 13)):
-        super(server_conv2d_model, self).__init__()
-
-        # last_layer_input_size = input_size
-        model_list = []
-        # last_layer_input_size = 800
-        # model_list.append(nn.Conv2d(4, 8, kernel_size = 3, stride = 1, bias = False))
-        # model_list.append(nn.BatchNorm2d(8))
-        # model_list.append(nn.ReLU())
-        model_list.append(nn.Conv2d(12,30, kernel_size = 3, stride = 2, bias = False))
-        model_list.append(nn.BatchNorm2d(30))
-        model_list.append(nn.ReLU())
-        model_list.append(nn.Flatten(1))
-        last_layer_input_size = 660
-        for _ in range(number_hidden):
-            model_list.append(nn.Linear(last_layer_input_size, hidden_size, bias = True))
-            # model_list.append(nn.Dropout(0.25))
-            model_list.append(nn.ReLU())
-            last_layer_input_size = hidden_size
-        
-        model_list.append(nn.Linear(last_layer_input_size, num_class, bias = True))
-
-        self.server = nn.Sequential(*model_list)
-
-        print("server:")
-        print(self.server)
-    def forward(self, x):
-        out = self.server(x)
-        return out
 
 if model_type == "fc":
     s_model = server_model(num_class = size_output_nodes, number_hidden = number_hidden, hidden_size = hidden_size, input_size = size_hidden_nodes)
@@ -482,7 +333,8 @@ def server_train(train_in, train_out):
     s_optimizer.zero_grad()
     c_optimizer.zero_grad()
 
-    output = s_model(c_model(input))
+    z_private = c_model(input)
+    output = s_model(z_private)
     
     criterion = nn.CrossEntropyLoss()
 
@@ -665,9 +517,9 @@ def raw_to_mfcc(filename):
     with open(f'./datasets/{experiment}/'+filename) as f:
         data = json.load(f)
         if 'payload' in data:
-            raw_dt_npy = np.array(data['payload']['values'],dtype=np.float)
+            raw_dt_npy = np.array(data['payload']['values'],dtype=float)
         else:
-            raw_dt_npy = np.array(data['values'],dtype=np.float)
+            raw_dt_npy = np.array(data['values'],dtype=float)
     #add padding
     # padding_ary = np.zeros(320,)
     # raw_dt_npy = np.concatenate((raw_dt_npy,padding_ary))
@@ -1150,61 +1002,60 @@ for epoch in range(epoch_size):
 train_time = time.time() - init_time
 
 #%% save model
-torch.save(c_model.state_dict(),'c_model.pth')
-torch.save(s_model.state_dict(),'s_model.pth')
-#%% transfer to tflite model
-pytorch2tflite('c_model.pth','c_model')
-pytorch2tflite('s_model.pth','s_model')
+# torch.save(c_model.state_dict(),'c_model.pth')
+# torch.save(s_model.state_dict(),'s_model.pth')
+# pytorch2tflite('c_model.pth','c_model')
+# pytorch2tflite('s_model.pth','s_model')
 
-exit()
-plt.figure(1)
-plt.ion()
-plt.show()
+# exit()
+# plt.figure(1)
+# plt.ion()
+# plt.show()
 
-font_sm = 13
-font_md = 16
-font_xl = 18
-plt.rc('font', size=font_sm)          # controls default text sizes
-plt.rc('axes', titlesize=font_sm)     # fontsize of the axes title
-plt.rc('axes', labelsize=font_md)     # fontsize of the x and y labels
-plt.rc('xtick', labelsize=font_sm)    # fontsize of the tick labels
-plt.rc('ytick', labelsize=font_sm)    # fontsize of the tick labels
-plt.rc('legend', fontsize=font_sm)    # legend fontsize
-plt.rc('figure', titlesize=font_xl)   # fontsize of the figure title
+# font_sm = 13
+# font_md = 16
+# font_xl = 18
+# plt.rc('font', size=font_sm)          # controls default text sizes
+# plt.rc('axes', titlesize=font_sm)     # fontsize of the axes title
+# plt.rc('axes', labelsize=font_md)     # fontsize of the x and y labels
+# plt.rc('xtick', labelsize=font_sm)    # fontsize of the tick labels
+# plt.rc('ytick', labelsize=font_sm)    # fontsize of the tick labels
+# plt.rc('legend', fontsize=font_sm)    # legend fontsize
+# plt.rc('figure', titlesize=font_xl)   # fontsize of the figure title
 
-plot_graph()
-figname = f"newplots/ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-HN{size_hidden_nodes}-TT{train_time}-{experiment}_train.eps"
-plt.savefig(figname, format='eps')
-logger.debug(f"Generated {figname}")
+# plot_graph()
+# figname = f"newplots/ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-HN{size_hidden_nodes}-TT{train_time}-{experiment}_train.eps"
+# plt.savefig(figname, format='eps')
+# logger.debug(f"Generated {figname}")
 
-plt.figure(2)
-plt.ion()
-plt.show()
-plt.rc('font', size=font_sm)          # controls default text sizes
-plt.rc('axes', titlesize=font_sm)     # fontsize of the axes title
-plt.rc('axes', labelsize=font_md)     # fontsize of the x and y labels
-plt.rc('xtick', labelsize=font_sm)    # fontsize of the tick labels
-plt.rc('ytick', labelsize=font_sm)    # fontsize of the tick labels
-plt.rc('legend', fontsize=font_sm)    # legend fontsize
-plt.rc('figure', titlesize=font_xl)   # fontsize of the figure title
-plot_val_graph()
-figname2 = f"newplots/ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-HN{size_hidden_nodes}-TT{train_time}-{experiment}_val.eps"
-plt.savefig(figname2, format='eps')
-print(f"Generated {figname2}")
+# plt.figure(2)
+# plt.ion()
+# plt.show()
+# plt.rc('font', size=font_sm)          # controls default text sizes
+# plt.rc('axes', titlesize=font_sm)     # fontsize of the axes title
+# plt.rc('axes', labelsize=font_md)     # fontsize of the x and y labels
+# plt.rc('xtick', labelsize=font_sm)    # fontsize of the tick labels
+# plt.rc('ytick', labelsize=font_sm)    # fontsize of the tick labels
+# plt.rc('legend', fontsize=font_sm)    # legend fontsize
+# plt.rc('figure', titlesize=font_xl)   # fontsize of the figure title
+# plot_val_graph()
+# figname2 = f"newplots/ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-HN{size_hidden_nodes}-TT{train_time}-{experiment}_val.eps"
+# plt.savefig(figname2, format='eps')
+# print(f"Generated {figname2}")
 
-plt.figure(3)
-plt.ion()
-plt.show()
-plt.rc('font', size=font_sm)          # controls default text sizes
-plt.rc('axes', titlesize=font_sm)     # fontsize of the axes title
-plt.rc('axes', labelsize=font_md)     # fontsize of the x and y labels
-plt.rc('xtick', labelsize=font_sm)    # fontsize of the tick labels
-plt.rc('ytick', labelsize=font_sm)    # fontsize of the tick labels
-plt.rc('legend', fontsize=font_sm)    # legend fontsize
-plt.rc('figure', titlesize=font_xl)   # fontsize of the figure title
-plot_train_accu()
-figname3 = f"newplots/ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-HN{size_hidden_nodes}-TT{train_time}-{experiment}_train_accu.eps"
-plt.savefig(figname3, format='eps')
-logger.debug(f"Generated {figname3}")
+# plt.figure(3)
+# plt.ion()
+# plt.show()
+# plt.rc('font', size=font_sm)          # controls default text sizes
+# plt.rc('axes', titlesize=font_sm)     # fontsize of the axes title
+# plt.rc('axes', labelsize=font_md)     # fontsize of the x and y labels
+# plt.rc('xtick', labelsize=font_sm)    # fontsize of the tick labels
+# plt.rc('ytick', labelsize=font_sm)    # fontsize of the tick labels
+# plt.rc('legend', fontsize=font_sm)    # legend fontsize
+# plt.rc('figure', titlesize=font_xl)   # fontsize of the figure title
+# plot_train_accu()
+# figname3 = f"newplots/ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-HN{size_hidden_nodes}-TT{train_time}-{experiment}_train_accu.eps"
+# plt.savefig(figname3, format='eps')
+# logger.debug(f"Generated {figname3}")
 
 
