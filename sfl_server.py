@@ -11,7 +11,7 @@ import os
 import random
 import logging
 import sys
-
+import copy
 random_seed=1234
 import torch
 import torch.nn as nn
@@ -65,8 +65,11 @@ epoch_size = 3 # default = 1
 batch_size = 10 # Must be even, hsa to be split into 2 types of samples
 running_batch_accu = 0
 running_batch_accu_list = []
-experiment = 'digits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
-# experiment = 'EN_digits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
+# experiment = 'digits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
+experiment = 'EN_digits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
+
+num_simulated_clients = 8
+num_devices = 2
 
 # initialize client-side model
 size_hidden_nodes = 1152
@@ -74,7 +77,7 @@ if experiment == "custom":
     size_output_nodes = 5
     samples_per_device = 250 # Amount of samples of each word to send to each device
 elif experiment == 'EN_digits':
-    samples_per_device = 1400 # Amount of samples of each word to send to each device
+    samples_per_device = 630 # Amount of samples of each word to send to each device
     size_output_nodes = 7
     batch_size = 14 # Must be even, hsa to be split into 2 types of samples
 elif experiment == 'digits':
@@ -85,19 +88,11 @@ else: # mountain datasets
     size_output_nodes = 3
     samples_per_device = 300 # Amount of samples of each word to send to each device
 
-size_hidden_layer = 72
-hidden_layer = (np.random.normal(size=(size_hidden_layer, )) * np.sqrt(2./72)).astype('float32')
+NFilter = 8
+size_hidden_layer = NFilter * 9
+hidden_layer = (np.random.normal(size=(size_hidden_layer, )) * np.sqrt(2./size_hidden_layer)).astype('float32')
 
 logger.debug("\nTraining Setting: dataset {}, Total Round {}, data_per_round {}". format(experiment, epoch_size * int(samples_per_device/batch_size), batch_size))
-
-# # We add an extra layer at the server-side model
-# neuron_layer_2nd = 2 * size_hidden_nodes
-
-# size_layer_2nd = (size_hidden_nodes+1)*neuron_layer_2nd
-# layer_2nd = np.random.uniform(-0.5, 0.5, size_layer_2nd).astype('float32')
-# layer_2nd_weight_updates = np.zeros_like(layer_2nd)
-
-#TODO: we will use pytorch on server-side model to automate the training.
 
 # initialize server-side model #TODO: step - 1 [we simply split current architecture] step - 2: after this is done, we extend architecture using pytorch.
 size_output_layer = (size_hidden_nodes+1)*size_output_nodes # why we need one more row
@@ -110,18 +105,22 @@ number_hidden = 1
 hidden_size = 128
 
 logger.debug("Model Setting: momentum {}, lr {}, number_hidden {}, hidden_size {}". format(momentum, learningRate, number_hidden, hidden_size))
+max_accu = 0
 
 def init_weights(m):
     if isinstance(m, nn.Linear):
       init.kaiming_normal(m.weight)
-      m.bias.data.zero_()
-# def init_weights(m):
-#     if type(m) == nn.Linear:
-#         torch.nn.init.uniform_(m.weight, a = -0.5, b = 0.5)
-#         torch.nn.init.uniform_(m.bias, a = -0.5, b = 0.5)
-#     if type(m) == nn.Conv2d:
-#         torch.nn.init.uniform_(m.weight, a = -0.5, b = 0.5)
-#         torch.nn.init.uniform_(m.bias, a = -0.5, b = 0.5)
+      if m.bias is not None:
+        m.bias.data.zero_()
+    elif isinstance(m, nn.Conv1d):
+      init.kaiming_normal(m.weight)
+      if m.bias is not None:
+        m.bias.data.zero_()
+    elif isinstance(m, nn.Conv2d):
+      init.kaiming_normal(m.weight)
+      if m.bias is not None:
+        m.bias.data.zero_()
+
 
 class client_model(nn.Module):
     '''
@@ -209,6 +208,16 @@ c_model = client_model()
 c_model.load_state_dict({'client.0.weight': torch.tensor(hidden_layer).view(8,1,3,3).float()})
 s_optimizer = torch.optim.SGD(list(s_model.parameters()), lr=learningRate, momentum=momentum, weight_decay=5e-4)
 c_optimizer = torch.optim.SGD(list(c_model.parameters()), lr=learningRate, momentum=momentum, weight_decay=5e-4)
+
+if num_simulated_clients > 0:
+    
+    list_simu_c_model = []
+    list_simu_c_optimizer = []
+    for i in range(num_simulated_clients):
+        simu_c_model = client_model()
+        list_simu_c_model.append(copy.deepcopy(simu_c_model))
+        list_simu_c_model[i].load_state_dict({'client.0.weight': torch.tensor(hidden_layer).view(8,1,3,3).float()})
+        list_simu_c_optimizer.append(torch.optim.SGD(list(list_simu_c_model[i].parameters()), lr=learningRate, momentum=momentum, weight_decay=5e-4))
 # s_optimizer = torch.optim.Adam(list(s_model.parameters()), lr=learningRate)
 
 
@@ -306,6 +315,31 @@ def server_compute(Hidden, target, only_forward = False):
         accu = accu.detach().numpy()
         return accu, error
 
+
+
+def simu_c_compute(train_in, train_out, client_id = 0):
+    input = torch.tensor(train_in).float()
+    label = torch.tensor(train_out).long().view(1,)
+    s_model.train()
+    list_simu_c_model[client_id].train()
+    s_optimizer.zero_grad()
+    list_simu_c_optimizer[client_id].zero_grad()
+    
+    output = s_model(list_simu_c_model[client_id](input))
+    criterion = nn.CrossEntropyLoss()
+    loss = criterion(output, label)
+
+    error = loss.detach().numpy()
+
+    loss.backward()
+
+    s_optimizer.step()
+    list_simu_c_optimizer[client_id].step()
+    
+    accu = (torch.argmax(output) == label).sum()
+    accu = accu.detach().numpy()
+
+    return accu, error
 
 def server_validate(test_in, test_out):
     # multiple_batch
@@ -570,6 +604,19 @@ def getSamplesIID(batch_size, batch_start_index):
         label_list_array = np.array(label_list).reshape(-1, 1)
     return input_list_array, label_list_array
 
+def raw_to_mfcc(filename):
+        # with open('./datasets/CN_digits/'+filename) as f:
+    with open(f'./datasets/{experiment}/'+filename) as f:
+        data = json.load(f)
+        if 'payload' in data:
+            raw_dt_npy = np.array(data['payload']['values'],dtype=np.float)
+        else:
+            raw_dt_npy = np.array(data['values'],dtype=np.float)
+    padding_ary = np.zeros(320,)
+    raw_dt_npy = np.concatenate((raw_dt_npy,padding_ary))
+    raw_dt_npy=speechpy.processing.preemphasis(raw_dt_npy,cof=0.98, shift=1)
+    mfccs = speechpy.feature.mfcc(raw_dt_npy, frame_stride=0.020,frame_length=0.020,sampling_frequency=16000, fft_length=256, low_frequency=0, num_filters=32)
+    return mfccs
 
 def getSamplesIIDDigits(batch_size, batch_start_index):
     global digits_silence_files, digits_one_files, digits_two_files, digits_three_files, digits_four_files, digits_five_files, digits_unknown_files
@@ -588,7 +635,10 @@ def getSamplesIIDDigits(batch_size, batch_start_index):
         
         filename = digits_silence_files[i]
         num_button = 1
-        input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        try: 
+            input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        except:
+            input_array = raw_to_mfcc(filename).flatten()
 
         
         input_list.append(input_array)
@@ -596,37 +646,55 @@ def getSamplesIIDDigits(batch_size, batch_start_index):
         
         filename = digits_one_files[i]
         num_button = 2
-        input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        try: 
+            input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        except:
+            input_array = raw_to_mfcc(filename).flatten()
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
 
         filename = digits_two_files[i]
         num_button = 3
-        input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        try: 
+            input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        except:
+            input_array = raw_to_mfcc(filename).flatten()
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
 
         filename = digits_three_files[i]
         num_button = 4
-        input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        try: 
+            input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        except:
+            input_array = raw_to_mfcc(filename).flatten()
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
 
         filename = digits_four_files[i]
         num_button = 5
-        input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        try: 
+            input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        except:
+            input_array = raw_to_mfcc(filename).flatten()
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
 
         filename = digits_five_files[i]
         num_button = 6
-        input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        try: 
+            input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        except:
+            input_array = raw_to_mfcc(filename).flatten()
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
 
         filename = digits_unknown_files[i]
         num_button = 7
-        input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        try: 
+            input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
+        except:
+            input_array = raw_to_mfcc(filename).flatten()
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
 
@@ -713,12 +781,13 @@ def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False
             forward_accu, forward_error, error_array = server_compute(hidden_activation, label, only_forward= False)
             
             error_array = error_array.flatten()
+
             # Send Error Array to client to continue backward #TODO: implement this
             for i in range(size_hidden_nodes): # hidden layer
-                d.read() # wait until confirmatio
+                device.read() # wait until confirmatio
                 float_num = error_array[i]
                 data = struct.pack('f', float_num)
-                d.write(data)
+                device.write(data)
 
         device.readline().decode() # Accept 'Done' command
 
@@ -837,7 +906,7 @@ def listenDevice(device, deviceIndex):
             print("Paused...")
             time.sleep(0.1)
 
-        d.timeout = None
+        device.timeout = None
         msg = device.readline().decode()
         if (len(msg) > 0):
             print(f'({device.port}):', msg, end="")
@@ -905,15 +974,15 @@ def sendModel(d, hidden_layer, output_layer):
 
 
 def startFL():
-    global devices_connected, hidden_layer, output_layer, pauseListen
+    global devices_connected, hidden_layer, output_layer, pauseListen, max_accu
 
     pauseListen = True
 
     print('Model Aggregation...')
     old_devices_connected = devices_connected
     devices_connected = []
-    devices_hidden_layer = np.empty((len(devices), size_hidden_layer), dtype='float32')
-    devices_output_layer = np.empty((len(devices), size_output_layer), dtype='float32')
+    devices_hidden_layer = np.empty((len(devices) + num_simulated_clients, size_hidden_layer), dtype='float32')
+    devices_output_layer = np.empty((len(devices) + num_simulated_clients, size_output_layer), dtype='float32')
     devices_num_epochs = []
     
     ##################
@@ -932,14 +1001,20 @@ def startFL():
     # Processing models
     ####################
 
+    if num_simulated_clients > 0:
+        for i in range(num_simulated_clients):
+            devices_hidden_layer[len(devices) + i, :] = list_simu_c_model[i].state_dict()['client.0.weight'].numpy().flatten()
+    # print(devices_hidden_layer)
     # if sum == 0, any device made any epoch
     if sum(devices_num_epochs) > 0:
         # We can use weights to change the importance of each device
         # example weights = [1, 0.5] -> giving more importance to the first device...
         # is like percentage of importance :  sum(a * weights) / sum(weights)
         ini_time = time.time() * 1000
-        hidden_layer = np.average(devices_hidden_layer, axis=0, weights=devices_num_epochs)
-        output_layer = np.average(devices_output_layer, axis=0, weights=devices_num_epochs)
+        # hidden_layer = np.average(devices_hidden_layer, axis=0, weights=devices_num_epochs)
+        hidden_layer = np.average(devices_hidden_layer, axis=0)
+        # output_layer = np.average(devices_output_layer, axis=0, weights=devices_num_epochs)
+        output_layer = np.average(devices_output_layer, axis=0)
 
     # Doing validation
     c_model.load_state_dict({'client.0.weight': torch.tensor(hidden_layer).view(8,1,3,3).float()})
@@ -950,6 +1025,19 @@ def startFL():
         error, accu = server_validate(test_in, test_out)
         logger.debug(f"Validation Accuracy {100 * accu}%\n")
         val_graph.append([error, accu, 0])
+    elif experiment == "EN_digits":
+        test_in, test_out = getSamplesIIDDigits(700, 6300)
+        test_in = np.reshape(test_in, (700, 1, 13, 50))
+        error, accu = server_validate(test_in, test_out)
+        logger.debug(f"Validation Accuracy {100 * accu}%\n")
+        val_graph.append([error, accu, 0])
+
+        if accu > max_accu:
+            max_accu = accu
+            torch.save(c_model.state_dict(), "models/c_model.pt")
+            torch.save(s_model.state_dict(), "models/s_model.pt")
+        
+
     elif experiment == "iid":
         test_in, test_out = getSamplesIID(60, 300)
 
@@ -968,6 +1056,9 @@ def startFL():
         threads.append(thread)
     for thread in threads: thread.join() # Wait for all the threads to end
 
+    if num_simulated_clients > 0:
+        for i in range(num_simulated_clients):
+            list_simu_c_model[i].load_state_dict({'client.0.weight': torch.tensor(hidden_layer).view(8,1,3,3).float()})
 
     pauseListen = False
 
@@ -980,21 +1071,28 @@ def set_button(device, button):
 # getDevices()
 
 global devices, devices_connected
-num_devices = 1
 
 available_ports = comports()
 print("Available ports:")
 for available_port in available_ports:
     print(available_port)
 
-try:
-    print("Access default port")
-    devices = [serial.Serial('/dev/ttyACM0', 9600)]
-except:
-    print("Access alternative port")
-    devices = [serial.Serial('COM7', 9600)]
-devices_connected = devices
-
+if num_devices == 1:
+    try:
+        print("Access default port")
+        devices = [serial.Serial('/dev/ttyACM0', 9600)]
+    except:
+        print("Access alternative port")
+        devices = [serial.Serial('COM7', 9600)]
+    devices_connected = devices
+elif num_devices == 2:
+    try:
+        print("Access default port")
+        devices = [serial.Serial('/dev/ttyACM0', 9600), serial.Serial('/dev/ttyACM1', 9600)]
+    except:
+        print("Access alternative port")
+        devices = [serial.Serial('COM7', 9600), serial.Serial('COM8', 9600)]
+    devices_connected = devices
 
 
 
@@ -1024,30 +1122,61 @@ ini_time = time.time()
 for epoch in range(epoch_size):
     total_round = int(samples_per_device/batch_size)
     for batch in range(total_round):
-        running_batch_accu = 0
+        
         logger.debug("Epoch {}/{}, Round {}/{} (data per round: {})".format(epoch, epoch_size, batch, total_round, batch_size))
-        for deviceIndex, device in enumerate(devices):
-            if experiment == 'iid' or experiment == 'train-test':
-                thread = threading.Thread(target=sendSamplesIID, args=(device, deviceIndex, batch_size, batch))
-            elif experiment == 'no-iid':
-                thread = threading.Thread(target=sendSamplesNonIID, args=(device, deviceIndex, batch_size, batch))
-            elif experiment == 'custom':
-                thread = threading.Thread(target=sendSamplesIIDCustom, args=(device, deviceIndex, batch_size, batch))
-            elif experiment == 'digits':
-                thread = threading.Thread(target=sendSamplesIIDDigits, args=(device, deviceIndex, batch_size, batch))
-            elif experiment == 'EN_digits':
-                thread = threading.Thread(target=sendSamplesIIDENDigits, args=(device, deviceIndex, batch_size, batch))
+        
+        
 
-            thread.daemon = True
-            thread.start()
-            threads.append(thread)
-        for thread in threads: thread.join() # Wait for all the threads to end
-        
-        logger.debug("Training Accuracy is {}%".format(100 * running_batch_accu/batch_size))
-        
+        for deviceIndex, device in enumerate(devices):
+            # logger.debug("(Client-{}) Training Starts".format(deviceIndex))
+            running_batch_accu = 0
+            if experiment == 'iid' or experiment == 'train-test':
+                sendSamplesIID(device, deviceIndex, batch_size, batch)
+            elif experiment == 'no-iid':
+                sendSamplesNonIID(device, deviceIndex, batch_size, batch)
+            elif experiment == 'custom':
+                sendSamplesIIDCustom(device, deviceIndex, batch_size, batch)
+            elif experiment == 'digits':
+                sendSamplesIIDDigits(device, deviceIndex, batch_size, batch)
+            elif experiment == 'EN_digits':
+                sendSamplesIIDENDigits(device, deviceIndex, batch_size, batch)
+            running_batch_accu_list.append(running_batch_accu/batch_size)
+            logger.debug("(Real Client-{}) Training Accuracy is {}%".format(deviceIndex, 100 * running_batch_accu/batch_size))
+        # for deviceIndex, device in enumerate(devices):
+        #     if experiment == 'iid' or experiment == 'train-test':
+        #         thread = threading.Thread(target=sendSamplesIID, args=(device, deviceIndex, batch_size, batch))
+        #     elif experiment == 'no-iid':
+        #         thread = threading.Thread(target=sendSamplesNonIID, args=(device, deviceIndex, batch_size, batch))
+        #     elif experiment == 'custom':
+        #         thread = threading.Thread(target=sendSamplesIIDCustom, args=(device, deviceIndex, batch_size, batch))
+        #     elif experiment == 'digits':
+        #         thread = threading.Thread(target=sendSamplesIIDDigits, args=(device, deviceIndex, batch_size, batch))
+        #     elif experiment == 'EN_digits':
+        #         thread = threading.Thread(target=sendSamplesIIDENDigits, args=(device, deviceIndex, batch_size, batch))
+
+        #     thread.daemon = True
+        #     thread.start()
+        #     threads.append(thread)
+        # for thread in threads: thread.join() # Wait for all the threads to end
+        if num_simulated_clients > 0:
+            for i in range(num_simulated_clients):
+                running_batch_accu = 0
+                # print("getting audio files from {} to {}".format(samples_per_device * (len(devices) + i) + batch * batch_size, samples_per_device * (len(devices) + i) + batch * batch_size + batch_size))
+                batch_train_in, batch_train_out = getSamplesIIDDigits(batch_size, samples_per_device * (len(devices) + i) + batch * batch_size)
+                batch_train_in = batch_train_in.reshape(batch_size, -1)
+                batch_train_out = batch_train_out.reshape(batch_size, -1)
+                for j in range(batch_size):
+                    
+                    train_in = batch_train_in[j,].reshape(1, 1, 13, 50)
+                    train_out = batch_train_out[j].reshape(1,)
+                    accu, error = simu_c_compute(train_in, train_out, i)
+                    running_batch_accu += accu
+                running_batch_accu_list.append(running_batch_accu/batch_size)
+                logger.debug("(Simulated Client-{}) Training Accuracy is {}%".format(len(devices)+i, 100 * running_batch_accu/batch_size))
+
         startFL()
         
-        running_batch_accu_list.append(running_batch_accu/batch_size)
+        
     
 train_time = time.time()-ini_time
 
@@ -1065,6 +1194,8 @@ for i, d in enumerate(devices):
     thread = threading.Thread(target=listenDevice, args=(d, i))
     thread.daemon = True
     thread.start()
+
+logger.debug("Final Best Accuracy: {}.".format(max_accu))
 
 plt.figure(1)
 plt.ion()
