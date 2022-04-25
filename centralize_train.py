@@ -29,7 +29,13 @@ random.seed(random_seed)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-from pytorch_to_tensorflow_lite import pytorch2tflite
+#import for pytorch to tflite
+import onnx
+from collections import OrderedDict
+import tensorflow as tf
+from torch.autograd import Variable
+from onnx_tf.backend import prepare
+
 
 formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
 
@@ -1108,48 +1114,99 @@ elif model_type == "conv2d":
 
 
 
-init_time = time.time()
+# init_time = time.time()
 
-for epoch in range(epoch_size):
+# for epoch in range(epoch_size):
     
-    total_round = int(samples_per_device/batch_size)
+#     total_round = int(samples_per_device/batch_size)
     
-    # shuffle train data
-    permute_idx = np.random.permutation(samples_per_device)
-    train_in[:, ] = train_in[permute_idx, ]
-    train_out[:, ] = train_out[permute_idx, ]
+#     # shuffle train data
+#     permute_idx = np.random.permutation(samples_per_device)
+#     train_in[:, ] = train_in[permute_idx, ]
+#     train_out[:, ] = train_out[permute_idx, ]
 
-    for batch in range(total_round):
-        logger.debug("Epoch {}/{}, Round {}/{} (data per round: {})".format(epoch, epoch_size, batch, total_round, batch_size))
-        running_batch_accu = 0
+#     for batch in range(total_round):
+#         logger.debug("Epoch {}/{}, Round {}/{} (data per round: {})".format(epoch, epoch_size, batch, total_round, batch_size))
+#         running_batch_accu = 0
         
-        for step in range(batch_size//step_size):
-            batch_train_in = train_in[batch*batch_size+step*step_size:batch*batch_size+(step+1)*step_size,:]
-            batch_train_out = train_out[batch*batch_size+step*step_size:batch*batch_size+(step+1)*step_size,:]
+#         for step in range(batch_size//step_size):
+#             batch_train_in = train_in[batch*batch_size+step*step_size:batch*batch_size+(step+1)*step_size,:]
+#             batch_train_out = train_out[batch*batch_size+step*step_size:batch*batch_size+(step+1)*step_size,:]
 
-            train_error, train_accu = server_train(batch_train_in, batch_train_out)
+#             train_error, train_accu = server_train(batch_train_in, batch_train_out)
 
-            running_batch_accu += train_accu
+#             running_batch_accu += train_accu
             
-            graph.append([batch, train_error, 0])
+#             graph.append([batch, train_error, 0])
 
-        val_error, val_accu = server_validate(test_in, test_out)
+#         val_error, val_accu = server_validate(test_in, test_out)
 
-        logger.debug(f"Validation Accuracy {100 * val_accu}%\n")
+#         logger.debug(f"Validation Accuracy {100 * val_accu}%\n")
 
-        val_graph.append([val_error, val_accu, 0])
+#         val_graph.append([val_error, val_accu, 0])
     
-        logger.debug("Training Accuracy is {}%".format(100 * running_batch_accu/batch_size))
-        # print(running_batch_accu, batch_size)
-        running_batch_accu_list.append(running_batch_accu/batch_size)
+#         logger.debug("Training Accuracy is {}%".format(100 * running_batch_accu/batch_size))
+#         # print(running_batch_accu, batch_size)
+#         running_batch_accu_list.append(running_batch_accu/batch_size)
         
-train_time = time.time() - init_time
+# train_time = time.time() - init_time
 
+#TODO: link model together
 #%% save model
-torch.save(c_model.state_dict(),'c_model.pth')
-torch.save(s_model.state_dict(),'s_model.pth')
+# torch.save(c_model.state_dict(),'c_model.pth')
+# torch.save(s_model.state_dict(),'s_model.pth')
 #%% transfer to tflite model
-pytorch2tflite('c_model.pth','c_model')
+
+## get representative data fro quant
+def rep_dataset(): #test_in is global
+    test_data = np.reshape(test_in, (total_samples - samples_per_device, 1, 13, 50))
+    for input_value in tf.data.Dataset.from_tensor_slices(test_data).batch(1).take(100):
+        yield [input_value]
+
+def pytorch2tflite(torch_model,model_name):
+    # trained_dict = torch.load("s_model.pth")
+    trained_dict = torch.load(torch_model)
+    logger.debug("load succeed!")
+    if model_name == 's_model':
+        trained_model = server_conv2d_model(7, 1, 128, (50,13))
+    else: #model_name == c_model
+        trained_model = client_conv2d_model()
+    trained_model.load_state_dict(trained_dict)
+
+    if not os.path.exists("tfl_model"):
+        os.makedirs("tfl_model")
+
+    # Export the trained model to ONNX
+    if model_name == 's_model':
+        dummy_input = Variable(torch.randn(1, 12, 6,24)) # (1,1,28,28) one black and white 28 x 28 picture (mnist)
+    if model_name == 'c_model':
+        dummy_input = Variable(torch.randn(1, 1, 13,50))
+    torch.onnx.export(trained_model, dummy_input, f"tfl_model/{model_name}.onnx")
+
+    # Load the ONNX file
+    model = onnx.load(f"tfl_model/{model_name}.onnx")
+    ## verify onnx model
+    onnx.checker.check_model(model)
+    # Import the ONNX model to Tensorflow
+    tf_rep = prepare(model)
+
+    tf_rep.export_graph(f"tfl_model/{model_name}.pb")
+
+    # converter = tf.lite.TFLiteConverter.from_frozen_graph(
+    #  f       "%s/{model_name}.pb" % sys.argv[1], tf_rep.inputs, tf_rep.outputs)
+    # --------- above not work because "from_frozen_graph" is in older tf version
+    converter = tf.lite.TFLiteConverter.from_saved_model(f"tfl_model/{model_name}.pb")
+    # --------- add quant here ------------
+    converter.optimizations = [tf.lite.Optimize.DEFAULT]
+    converter.representative_dataset = rep_dataset
+    converter.inference_input_type = tf.int8
+    converter.inference_output_type = tf.int8
+    
+    # write to tflite model
+    tflite_model = converter.convert() #TODO: add quant
+    open(f"tfl_model/{model_name}.tflite", "wb").write(tflite_model)
+    print("------ finished: from tf to tfl ------------")
+# pytorch2tflite('c_model.pth','c_model')
 pytorch2tflite('s_model.pth','s_model')
 
 exit()
