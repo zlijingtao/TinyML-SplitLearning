@@ -7,3 +7,4 @@ newplots/
 *.code-workspace
 dataset/
 tensorflow/
+log.txt
