@@ -20,7 +20,7 @@ import torch.nn as nn
 import torch.nn.init as init
 import numpy as np
 # import librosa
-import speechpy
+from third_party import speechpy
 torch.manual_seed(random_seed)
 torch.cuda.manual_seed(random_seed)
 torch.cuda.manual_seed_all(random_seed)
@@ -666,11 +666,15 @@ def raw_to_mfcc(filename):
             raw_dt_npy = np.array(data['payload']['values'],dtype=np.float)
         else:
             raw_dt_npy = np.array(data['values'],dtype=np.float)
-    padding_ary = np.zeros(320,)
-    raw_dt_npy = np.concatenate((raw_dt_npy,padding_ary))
+    #add padding
+    # padding_ary = np.zeros(320,)
+    # raw_dt_npy = np.concatenate((raw_dt_npy,padding_ary))
+    #same processing flow as edge impulse
     raw_dt_npy=speechpy.processing.preemphasis(raw_dt_npy,cof=0.98, shift=1)
-    mfccs = speechpy.feature.mfcc(raw_dt_npy, frame_stride=0.020,frame_length=0.020,sampling_frequency=16000, fft_length=256, low_frequency=0, num_filters=32)
-    return mfccs
+    mfccs = speechpy.feature.mfcc(raw_dt_npy, frame_stride=0.020,frame_length=0.020,sampling_frequency=16000, implementation_version = 2, fft_length=256, low_frequency=0, num_filters=32)
+    mfcc_cmvn = speechpy.processing.cmvnw(mfccs, win_size=101, variance_normalization=True).flatten()
+    
+    return mfcc_cmvn
 
 def getSamplesIIDDigits(batch_size, batch_start_index):
     global digits_silence_files, digits_one_files, digits_two_files, digits_three_files, digits_four_files, digits_five_files, digits_unknown_files
@@ -692,7 +696,7 @@ def getSamplesIIDDigits(batch_size, batch_start_index):
         try: 
             input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
         except:
-            input_array = raw_to_mfcc(filename).flatten()
+            input_array = raw_to_mfcc(filename)
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
         
@@ -701,7 +705,7 @@ def getSamplesIIDDigits(batch_size, batch_start_index):
         try: 
             input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
         except:
-            input_array = raw_to_mfcc(filename).flatten()
+            input_array = raw_to_mfcc(filename)
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
 
@@ -710,7 +714,7 @@ def getSamplesIIDDigits(batch_size, batch_start_index):
         try: 
             input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
         except:
-            input_array = raw_to_mfcc(filename).flatten()
+            input_array = raw_to_mfcc(filename)
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
 
@@ -719,7 +723,7 @@ def getSamplesIIDDigits(batch_size, batch_start_index):
         try: 
             input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
         except:
-            input_array = raw_to_mfcc(filename).flatten()
+            input_array = raw_to_mfcc(filename)
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
 
@@ -728,7 +732,7 @@ def getSamplesIIDDigits(batch_size, batch_start_index):
         try: 
             input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
         except:
-            input_array = raw_to_mfcc(filename).flatten()
+            input_array = raw_to_mfcc(filename)
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
 
@@ -737,7 +741,7 @@ def getSamplesIIDDigits(batch_size, batch_start_index):
         try: 
             input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
         except:
-            input_array = raw_to_mfcc(filename).flatten()
+            input_array = raw_to_mfcc(filename)
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
 
@@ -746,7 +750,7 @@ def getSamplesIIDDigits(batch_size, batch_start_index):
         try: 
             input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
         except:
-            input_array = raw_to_mfcc(filename).flatten()
+            input_array = raw_to_mfcc(filename)
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
 

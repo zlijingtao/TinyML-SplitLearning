@@ -18,7 +18,7 @@ import torch.nn as nn
 import torch.nn.init as init
 import numpy as np
 # import librosa
-import speechpy
+from third_party import speechpy
 torch.manual_seed(random_seed)
 torch.cuda.manual_seed(random_seed)
 torch.cuda.manual_seed_all(random_seed)
