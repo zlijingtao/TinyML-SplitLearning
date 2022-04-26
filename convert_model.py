@@ -1,3 +1,4 @@
+#%%
 # import serial
 # from serial.tools.list_ports import comports
 
@@ -38,6 +39,17 @@ import tensorflow as tf
 from torch.autograd import Variable
 from onnx_tf.backend import prepare
 
+#%% compare torch and tflite model
+from converter import Torch2TFLiteConverter
+conv = Torch2TFLiteConverter(
+   "whole_model.pt",
+   "tfl_saved/whole_model.tflite",
+    #sample_file_path= torch.tensor(test_in).float(),
+    #target shape
+)
+exit()
+conv.sample_data = torch.tensor(test_in).float()
+conv.convert()
 
 formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
 
@@ -1035,7 +1047,7 @@ modelC.load_state_dict(torch.load("c_model.pth"))
 modelS.load_state_dict(torch.load("s_model.pth"))
 
 whole_model=Mywhole_model(modelC, modelS)
-
+torch.save(whole_model, 'whole_model.pt')
 #%% transfer to tflite model
 
 ## get representative data fro quant
@@ -1092,6 +1104,8 @@ def pytorch2tflite(torch_model,saved_dir, transfered_model):
 # pytorch2tflite('c_model.pth','c_model')
 pytorch2tflite(whole_model,'tfl_saved','whole_model')
 
+
+
 exit()
 plt.figure(1)
 plt.ion()
@@ -1143,4 +1157,4 @@ figname3 = f"newplots/ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}
 plt.savefig(figname3, format='eps')
 logger.debug(f"Generated {figname3}")
 
-
+# %%
