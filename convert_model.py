@@ -39,17 +39,7 @@ import tensorflow as tf
 from torch.autograd import Variable
 from onnx_tf.backend import prepare
 
-#%% compare torch and tflite model
-from converter import Torch2TFLiteConverter
-conv = Torch2TFLiteConverter(
-   "whole_model.pt",
-   "tfl_saved/whole_model.tflite",
-    #sample_file_path= torch.tensor(test_in).float(),
-    #target shape
-)
-exit()
-conv.sample_data = torch.tensor(test_in).float()
-conv.convert()
+
 
 formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
 
@@ -1047,11 +1037,12 @@ modelC.load_state_dict(torch.load("c_model.pth"))
 modelS.load_state_dict(torch.load("s_model.pth"))
 
 whole_model=Mywhole_model(modelC, modelS)
-torch.save(whole_model, 'whole_model.pt')
+#%% save model for convert
+# torch.save(whole_model, 'whole_model.pt')
 #%% transfer to tflite model
 
-## get representative data fro quant
-def rep_dataset(): #test_in is global
+## get representative data for quant
+def rep_dataset(): #test_in is global #FIXME change to tensor?
     test_data = np.reshape(test_in, (total_samples - samples_per_device, 1, 13, 50))
     for input_value in tf.data.Dataset.from_tensor_slices(test_data).batch(1).take(100):
         yield [input_value]
@@ -1102,9 +1093,22 @@ def pytorch2tflite(torch_model,saved_dir, transfered_model):
     open(f"{saved_dir}/{transfered_model}.tflite", "wb").write(tflite_model)
     print("------ finished: from pytorch to tfl ------------")
 # pytorch2tflite('c_model.pth','c_model')
-pytorch2tflite(whole_model,'tfl_saved','whole_model')
+# pytorch2tflite(whole_model,'tfl_saved','whole_model')
 
+#%% compare torch and tflite model
+from converter import Torch2TFLiteConverter
+sample_data = torch.tensor(test_in).float()
 
+conv = Torch2TFLiteConverter(
+#    "whole_model.pt",
+   whole_model,
+   "tfl_saved/whole_model.tflite",
+   sample_data
+    #sample_file_path= torch.tensor(test_in).float(),
+    #target shape
+)
+conv.convert()
+exit()
 
 exit()
 plt.figure(1)
