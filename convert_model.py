@@ -1085,15 +1085,15 @@ def pytorch2tflite(torch_model,saved_dir, transfered_model):
     # --------- add quant here ------------
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
     converter.representative_dataset = rep_dataset
-    converter.inference_input_type = tf.int8
-    converter.inference_output_type = tf.int8
+    # converter.inference_input_type = tf.int8
+    # converter.inference_output_type = tf.int8
     
     # write to tflite model
     tflite_model = converter.convert() #TODO: add quant
     open(f"{saved_dir}/{transfered_model}.tflite", "wb").write(tflite_model)
     print("------ finished: from pytorch to tfl ------------")
 # pytorch2tflite('c_model.pth','c_model')
-# pytorch2tflite(whole_model,'tfl_saved','whole_model')
+pytorch2tflite(whole_model,'tfl_saved','whole_model')
 
 #%% compare torch and tflite model
 from converter import Torch2TFLiteConverter
