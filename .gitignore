@@ -8,3 +8,5 @@ newplots/
 dataset/
 tensorflow/
 log.txt
+c_model.pth
+s_model.pth

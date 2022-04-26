@@ -159,24 +159,24 @@ def init_weights(m):
 #         torch.nn.init.uniform_(m.bias, a = -0.5, b = 0.5)
 
 
-if model_type == "fc":
-    s_model = server_model(num_class = size_output_nodes, number_hidden = number_hidden, hidden_size = hidden_size, input_size = size_hidden_nodes)
+# if model_type == "fc":
+#     s_model = server_model(num_class = size_output_nodes, number_hidden = number_hidden, hidden_size = hidden_size, input_size = size_hidden_nodes)
 
-    c_model = client_model()
-elif model_type == "conv1d":
-    s_model = server_conv_model(num_class = size_output_nodes, number_hidden = number_hidden, hidden_size = hidden_size)
+#     c_model = client_model()
+# elif model_type == "conv1d":
+#     s_model = server_conv_model(num_class = size_output_nodes, number_hidden = number_hidden, hidden_size = hidden_size)
 
-    c_model = client_conv_model()
-elif model_type == "conv2d":
-    s_model = server_conv2d_model(num_class = size_output_nodes, number_hidden = number_hidden, hidden_size = hidden_size)
+#     c_model = client_conv_model()
+# elif model_type == "conv2d":
+#     s_model = server_conv2d_model(num_class = size_output_nodes, number_hidden = number_hidden, hidden_size = hidden_size)
 
-    c_model = client_conv2d_model()
+#     c_model = client_conv2d_model()
 
-c_model.apply(init_weights)
-s_model.apply(init_weights)
+# c_model.apply(init_weights)
+# s_model.apply(init_weights)
 
-s_optimizer = torch.optim.SGD(list(s_model.parameters()), lr=learningRate, momentum=momentum, weight_decay=5e-4)
-c_optimizer = torch.optim.SGD(list(c_model.parameters()), lr=learningRate, momentum=momentum, weight_decay=5e-4)
+# s_optimizer = torch.optim.SGD(list(s_model.parameters()), lr=learningRate, momentum=momentum, weight_decay=5e-4)
+# c_optimizer = torch.optim.SGD(list(c_model.parameters()), lr=learningRate, momentum=momentum, weight_decay=5e-4)
 
 
 pauseListen = False # So there are no threads reading the serial input at the same time
@@ -1015,6 +1015,27 @@ elif model_type == "conv2d":
 #%% save model
 # torch.save(c_model.state_dict(),'c_model.pth')
 # torch.save(s_model.state_dict(),'s_model.pth')
+#%% load model
+class Mywhole_model(nn.Module):
+    def __init__(self, model_c, model_s):
+        super(Mywhole_model, self).__init__()
+        self.model_c=model_c
+        self.model_s=model_s
+
+    def forward(self,x):
+        x=self.model_c(x)
+        x=self.model_s(x)
+        return x
+
+#TODO: add init para for server
+modelC= client_conv2d_model()
+modelS= server_conv2d_model(num_class = size_output_nodes, number_hidden = number_hidden, hidden_size = hidden_size)
+
+modelC.load_state_dict(torch.load("c_model.pth"))
+modelS.load_state_dict(torch.load("s_model.pth"))
+
+whole_model=Mywhole_model(modelC, modelS)
+
 #%% transfer to tflite model
 
 ## get representative data fro quant
@@ -1023,39 +1044,41 @@ def rep_dataset(): #test_in is global
     for input_value in tf.data.Dataset.from_tensor_slices(test_data).batch(1).take(100):
         yield [input_value]
 
-def pytorch2tflite(torch_model,model_name):
+def pytorch2tflite(torch_model,saved_dir, transfered_model):
     # trained_dict = torch.load("s_model.pth")
-    trained_dict = torch.load(torch_model)
-    logger.debug("load succeed!")
-    if model_name == 's_model':
-        trained_model = server_conv2d_model(7, 1, 128, (50,13))
-    else: #model_name == c_model
-        trained_model = client_conv2d_model()
-    trained_model.load_state_dict(trained_dict)
+    # trained_dict = torch.load(torch_model)
+    
+    # logger.debug("load succeed!")
+    # if model_name == 's_model':
+    #     trained_model = server_conv2d_model(7, 1, 128, (50,13))
+    # else: #model_name == c_model
+    #     trained_model = client_conv2d_model()
+    # trained_model.load_state_dict(trained_dict)
 
-    if not os.path.exists("tfl_model"):
-        os.makedirs("tfl_model")
+    if not os.path.exists(saved_dir):
+        os.makedirs(saved_dir)
 
     # Export the trained model to ONNX
-    if model_name == 's_model':
-        dummy_input = Variable(torch.randn(1, 12, 6,24)) # (1,1,28,28) one black and white 28 x 28 picture (mnist)
-    if model_name == 'c_model':
-        dummy_input = Variable(torch.randn(1, 1, 13,50))
-    torch.onnx.export(trained_model, dummy_input, f"tfl_model/{model_name}.onnx")
+    # if model_name == 's_model':
+    #     dummy_input = Variable(torch.randn(1, 12, 6,24)) # (1,1,28,28) one black and white 28 x 28 picture (mnist)
+    # if model_name == 'c_model':
+    #     dummy_input = Variable(torch.randn(1, 1, 13,50))
+    dummy_input = Variable(torch.randn(1, 1, 13,50))
+    torch.onnx.export(torch_model, dummy_input, f"{saved_dir}/{transfered_model}.onnx")
 
     # Load the ONNX file
-    model = onnx.load(f"tfl_model/{model_name}.onnx")
+    model = onnx.load(f"{saved_dir}/{transfered_model}.onnx")
     ## verify onnx model
     onnx.checker.check_model(model)
     # Import the ONNX model to Tensorflow
     tf_rep = prepare(model)
 
-    tf_rep.export_graph(f"tfl_model/{model_name}.pb")
+    tf_rep.export_graph(f"{saved_dir}/{transfered_model}.pb")
 
     # converter = tf.lite.TFLiteConverter.from_frozen_graph(
     #  f       "%s/{model_name}.pb" % sys.argv[1], tf_rep.inputs, tf_rep.outputs)
     # --------- above not work because "from_frozen_graph" is in older tf version
-    converter = tf.lite.TFLiteConverter.from_saved_model(f"tfl_model/{model_name}.pb")
+    converter = tf.lite.TFLiteConverter.from_saved_model(f"{saved_dir}/{transfered_model}.pb")
     # --------- add quant here ------------
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
     converter.representative_dataset = rep_dataset
@@ -1064,10 +1087,10 @@ def pytorch2tflite(torch_model,model_name):
     
     # write to tflite model
     tflite_model = converter.convert() #TODO: add quant
-    open(f"tfl_model/{model_name}.tflite", "wb").write(tflite_model)
-    print("------ finished: from tf to tfl ------------")
+    open(f"{saved_dir}/{transfered_model}.tflite", "wb").write(tflite_model)
+    print("------ finished: from pytorch to tfl ------------")
 # pytorch2tflite('c_model.pth','c_model')
-pytorch2tflite('s_model.pth','s_model')
+pytorch2tflite(whole_model,'tfl_saved','whole_model')
 
 exit()
 plt.figure(1)
