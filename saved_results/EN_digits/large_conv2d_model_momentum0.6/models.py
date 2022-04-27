@@ -98,12 +98,7 @@ class server_conv_model(nn.Module):
         out = self.server(x)
         return out
 
-class Reshape(nn.Module):
-    def __init__(self):
-        super(Reshape, self).__init__()
-    def forward(self,x):
-        x = x.view(-1, 1, 13, 50)
-        return x
+
 class client_conv2d_model(nn.Module):
     '''
     VGG model 
@@ -112,14 +107,16 @@ class client_conv2d_model(nn.Module):
         super(client_conv2d_model, self).__init__()
 
         model_list = []
-        model_list.append(Reshape())
         model_list.append(nn.Conv2d(1, 12, kernel_size = 3, stride = 2, bias = False))
         model_list.append(nn.ReLU())
 
         self.client = nn.Sequential(*model_list)
 
     def forward(self, x):
+        # x = x.view(x.size(0), 13, 50)
+        # print(x.shape)
         out = self.client(x)
+        # print(out.shape)
         return out
 
 class server_conv2d_model(nn.Module):

@@ -80,7 +80,7 @@ epoch_size = 3 # 3,default = 1
 step_size = 1 # The real batch size
 experiment = 'EN_digits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
 # model_type = "fc"
-model_type = "conv2d"
+model_type = "fc"
 
 momentum = 0.6
 learningRate= 0.005
@@ -955,213 +955,71 @@ if experiment == 'EN_digits':
     train_in, train_out = getSamplesIIDDigits(samples_per_device, 0)
     test_in, test_out = getSamplesIIDDigits(total_samples - samples_per_device, samples_per_device)
 
-train_in = np.reshape(train_in, (samples_per_device, 650))
-test_in = np.reshape(test_in, (total_samples - samples_per_device, 650))
+if model_type == "fc":
+    train_in = np.reshape(train_in, (samples_per_device, 650))
+    test_in = np.reshape(test_in, (total_samples - samples_per_device, 650))
+elif model_type == "conv1d":
+    train_in = np.reshape(train_in, (samples_per_device, 13, 50))
+    # train_in = np.reshape(train_in, (samples_per_device, 50, 13)).transpose(0, 2, 1)
+    test_in = np.reshape(test_in, (total_samples - samples_per_device, 13, 50))
+    # test_in = np.reshape(test_in, (total_samples - samples_per_device, 50, 13)).transpose(0, 2, 1)
+elif model_type == "conv2d":
+    train_in = np.reshape(train_in, (samples_per_device, 1, 13, 50))
+    # train_in = np.reshape(train_in, (samples_per_device, 50, 13)).transpose(0, 2, 1)
+    test_in = np.reshape(test_in, (total_samples - samples_per_device, 1, 13, 50))
+    # test_in = np.reshape(test_in, (total_samples - samples_per_device, 50, 13)).transpose(0, 2, 1)
 
-# init_time = time.time()
 
-# for epoch in range(epoch_size):
+
+init_time = time.time()
+
+for epoch in range(epoch_size):
     
-#     total_round = int(samples_per_device/batch_size)
+    total_round = int(samples_per_device/batch_size)
     
-#     # shuffle train data
-#     permute_idx = np.random.permutation(samples_per_device)
-#     train_in[:, ] = train_in[permute_idx, ]
-#     train_out[:, ] = train_out[permute_idx, ]
+    # shuffle train data
+    permute_idx = np.random.permutation(samples_per_device)
+    train_in[:, ] = train_in[permute_idx, ]
+    train_out[:, ] = train_out[permute_idx, ]
 
-#     for batch in range(total_round):
-#         logger.debug("Epoch {}/{}, Round {}/{} (data per round: {})".format(epoch, epoch_size, batch, total_round, batch_size))
-#         running_batch_accu = 0
+    for batch in range(total_round):
+        logger.debug("Epoch {}/{}, Round {}/{} (data per round: {})".format(epoch, epoch_size, batch, total_round, batch_size))
+        running_batch_accu = 0
         
-#         for step in range(batch_size//step_size):
-#             batch_train_in = train_in[batch*batch_size+step*step_size:batch*batch_size+(step+1)*step_size,:]
-#             batch_train_out = train_out[batch*batch_size+step*step_size:batch*batch_size+(step+1)*step_size,:]
+        for step in range(batch_size//step_size):
+            batch_train_in = train_in[batch*batch_size+step*step_size:batch*batch_size+(step+1)*step_size,:]
+            batch_train_out = train_out[batch*batch_size+step*step_size:batch*batch_size+(step+1)*step_size,:]
 
-#             train_error, train_accu = server_train(batch_train_in, batch_train_out)
+            train_error, train_accu = server_train(batch_train_in, batch_train_out)
 
-#             running_batch_accu += train_accu
+            running_batch_accu += train_accu
             
-#             graph.append([batch, train_error, 0])
+            graph.append([batch, train_error, 0])
 
-#         val_error, val_accu = server_validate(test_in, test_out)
+        val_error, val_accu = server_validate(test_in, test_out)
 
-#         logger.debug(f"Validation Accuracy {100 * val_accu}%\n")
+        logger.debug(f"Validation Accuracy {100 * val_accu}%\n")
 
-#         if val_accu > max_accu:
-#             max_accu = val_accu
-#             torch.save(c_model.state_dict(), "./c_model.pth")
-#             torch.save(s_model.state_dict(), "./s_model.pth")
+        if val_accu > max_accu:
+            max_accu = val_accu
+            torch.save(c_model.state_dict(), "./c_model.pth")
+            torch.save(s_model.state_dict(), "./s_model.pth")
 
-#         val_graph.append([val_error, val_accu, 0])
+        val_graph.append([val_error, val_accu, 0])
     
-#         logger.debug("Training Accuracy is {}%".format(100 * running_batch_accu/batch_size))
-#         # print(running_batch_accu, batch_size)
-#         running_batch_accu_list.append(running_batch_accu/batch_size)
+        logger.debug("Training Accuracy is {}%".format(100 * running_batch_accu/batch_size))
+        # print(running_batch_accu, batch_size)
+        running_batch_accu_list.append(running_batch_accu/batch_size)
         
-# train_time = time.time() - init_time
-# logger.debug("Final Best Accuracy: {}.".format(max_accu))
-
-# # save model if needed
-# torch.save(c_model.state_dict(),'c_model.pth')
-# torch.save(s_model.state_dict(),'s_model.pth')
+train_time = time.time() - init_time
 
 
 
-save_file_name = "large_conv2d_model_momentum0.6"
+torch.save(c_model.state_dict(),'c_model.pth')
+torch.save(s_model.state_dict(),'s_model.pth')
 
-c_path = f"./saved_results/EN_digits/{save_file_name}/c_model.pt"
-s_path = f"./saved_results/EN_digits/{save_file_name}/s_model.pt"
+logger.debug("Final Best Accuracy: {}.".format(max_accu))
 
-# create the whole model
-class Mywhole_model(nn.Module):
-    def __init__(self, model_c, model_s):
-        super(Mywhole_model, self).__init__()
-        self.model_c=model_c
-        self.model_s=model_s
-
-    def forward(self,x):
-        x=self.model_c(x)
-        x=self.model_s(x)
-        return x
-## if c_model and s_model are loaded from saved models: 
-modelC= client_conv2d_model()
-modelS= server_conv2d_model(num_class = size_output_nodes, number_hidden = number_hidden, hidden_size = hidden_size)
-
-modelC.load_state_dict(torch.load(c_path))
-modelS.load_state_dict(torch.load(s_path))
-
-## if need to save model
-# torch.save(whole_model, 'whole_model.pt')
-whole_model=Mywhole_model(modelC, modelS)
-## if need to load model
-# whole_model = torch.load("whole_model.pt")
-
-# whole model validate function
-def whole_validate(test_in, test_out):
-    # multiple_batch
-    input = torch.tensor(test_in).float()
-    
-    label = torch.from_numpy(test_out).view(input.size(0),).long()
-
-    whole_model.eval()
-    with torch.no_grad():
-        output = whole_model(input)
-        
-        criterion = nn.CrossEntropyLoss()
-
-        loss = criterion(output, label)
-
-    error = loss.detach().numpy() / input.size(0)
-
-    accu = (torch.argmax(output, dim = 1) == label).sum() / input.size(0)
-
-    accu = accu.detach().numpy()
-    print("pytorch model's accuracy is:", accu)
-
-# transfer to tflite model
-
-## get representative data for quant
-def rep_dataset(): #test_in is global #FIXME change to tensor?
-    test_data = np.reshape(test_in, (total_samples - samples_per_device, 650))
-    for input_value in tf.data.Dataset.from_tensor_slices(test_data).batch(1).take(100):
-        yield [input_value]
-
-def pytorch2tflite(torch_model,saved_dir, transfered_model):
-
-    if not os.path.exists(saved_dir):
-        os.makedirs(saved_dir)
-
-    # Export the trained model to ONNX
-
-    # create dummpy input # (1,1,28,28) one black and white 28 x 28 picture (mnist)
-    # if model_name == 's_model':
-    #     dummy_input = Variable(torch.randn(1, 12, 6,24)) 
-    # if model_name == 'c_model':
-    #     dummy_input = Variable(torch.randn(1, 1, 13,50))
-    dummy_input = Variable(torch.randn(650,)) # for whole model
-    torch.onnx.export(torch_model, dummy_input, f"{saved_dir}/{transfered_model}.onnx")
-
-    # Load the ONNX file
-    model = onnx.load(f"{saved_dir}/{transfered_model}.onnx")
-    ## verify onnx model
-    onnx.checker.check_model(model)
-    # Import the ONNX model to Tensorflow
-    tf_rep = prepare(model)
-
-    tf_rep.export_graph(f"{saved_dir}/{transfered_model}.pb")
-
-    converter = tf.lite.TFLiteConverter.from_saved_model(f"{saved_dir}/{transfered_model}.pb")
-    # --------- add quant here ------------
-    # Convert using float fallback quantization
-    converter.optimizations = [tf.lite.Optimize.DEFAULT]
-    converter.representative_dataset = rep_dataset
-    # #using integer-only quantization #TODO
-    # converter.inference_input_type = tf.int8
-    # converter.inference_output_type = tf.int8
-    
-    # write to tflite model
-    tflite_model = converter.convert() #TODO: add quant
-    open(f"{saved_dir}/{transfered_model}.tflite", "wb").write(tflite_model)
-    print("------ finished: from pytorch to tfl ------------")
-    print(f"tlf_model saved to: {saved_dir}/{transfered_model}.tflite")
-
-# execute transformation
-pytorch2tflite(whole_model,'tfl_saved','whole_model') #torchmodel, saved_dir, transfered_model_name
-
-## --------------- evaluate pytorch and tfl model ---------------
-# Helper function to run inference on a TFLite model
-def run_tflite_model(tflite_file, test_out_indices):
-    global test_out
-    global test_in
-
-    # process test out
-    input = torch.tensor(test_in).float()
-    label = (torch.from_numpy(test_out).view(input.size(0),).long()).numpy()
-    # Initialize the interpreter
-    interpreter = tf.lite.Interpreter(model_path=str(tflite_file))
-    interpreter.allocate_tensors()
-
-    input_details = interpreter.get_input_details()[0]
-    output_details = interpreter.get_output_details()[0]
-
-    predictions = np.zeros((len(test_out_indices),), dtype=int)
-
-    for i, test_image_index in enumerate(test_out_indices):
-        test_image = input[test_image_index]
-        test_label = label[test_image_index]
-
-        # Check if the input type is quantized, then rescale input data to uint8
-        if input_details['dtype'] == np.uint8:
-            input_scale, input_zero_point = input_details["quantization"]
-            test_image = test_image / input_scale + input_zero_point
-
-        test_image = np.expand_dims(test_image, axis=0).astype(input_details["dtype"])
-        interpreter.set_tensor(input_details["index"], test_image)
-        interpreter.invoke()
-        output = interpreter.get_tensor(output_details["index"])[0]
-        predictions[i] = np.argmax(output)
-    return predictions
-
-# Helper function to evaluate a TFLite model on all images
-def evaluate_model(tflite_file):
-    global test_in
-    global test_out
-    input = torch.tensor(test_in).float()
-    label = (torch.from_numpy(test_out).view(input.size(0),).long()).numpy()
-    test_out_indices = range(test_in.shape[0])
-    predictions = run_tflite_model(tflite_file, test_out_indices)
-    accuracy = np.sum((predictions== label)) / len(test_in)
-
-    print('TFLite model accuracy is %.4f (Number of test samples=%d)' % (
-        accuracy, len(test_in)))
-
-## ---------- eva ----------
-TF_model = 'tfl_saved/whole_model.tflite' # specific file location
-evaluate_model(TF_model)
-whole_validate(test_in, test_out)
-
-os.system("xxd -i tfl_saved/whole_model.tflite tfl_saved/whole_model.cc")
-exit()
 plt.figure(1)
 plt.ion()
 plt.show()

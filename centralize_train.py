@@ -1019,153 +1019,153 @@ torch.save(c_model.state_dict(),'c_model.pth')
 torch.save(s_model.state_dict(),'s_model.pth')
 
 # create the whole model
-class Mywhole_model(nn.Module):
-    def __init__(self, model_c, model_s):
-        super(Mywhole_model, self).__init__()
-        self.model_c=model_c
-        self.model_s=model_s
+# class Mywhole_model(nn.Module):
+#     def __init__(self, model_c, model_s):
+#         super(Mywhole_model, self).__init__()
+#         self.model_c=model_c
+#         self.model_s=model_s
 
-    def forward(self,x):
-        x=self.model_c(x)
-        x=self.model_s(x)
-        return x
-## if c_model and s_model are loaded from saved models: 
-modelC= client_conv2d_model()
-modelS= server_conv2d_model(num_class = size_output_nodes, number_hidden = number_hidden, hidden_size = hidden_size)
+#     def forward(self,x):
+#         x=self.model_c(x)
+#         x=self.model_s(x)
+#         return x
+# ## if c_model and s_model are loaded from saved models: 
+# modelC= client_conv2d_model()
+# modelS= server_conv2d_model(num_class = size_output_nodes, number_hidden = number_hidden, hidden_size = hidden_size)
 
-modelC.load_state_dict(torch.load("c_model.pth"))
-modelS.load_state_dict(torch.load("s_model.pth"))
+# modelC.load_state_dict(torch.load("c_model.pth"))
+# modelS.load_state_dict(torch.load("s_model.pth"))
 
-## if need to save model
-# torch.save(whole_model, 'whole_model.pt')
-whole_model=Mywhole_model(modelC, modelS)
-## if need to load model
-# whole_model = torch.load("whole_model.pt")
+# ## if need to save model
+# # torch.save(whole_model, 'whole_model.pt')
+# whole_model=Mywhole_model(modelC, modelS)
+# ## if need to load model
+# # whole_model = torch.load("whole_model.pt")
 
-# whole model validate function
-def whole_validate(test_in, test_out):
-    # multiple_batch
-    input = torch.tensor(test_in).float()
+# # whole model validate function
+# def whole_validate(test_in, test_out):
+#     # multiple_batch
+#     input = torch.tensor(test_in).float()
     
-    label = torch.from_numpy(test_out).view(input.size(0),).long()
+#     label = torch.from_numpy(test_out).view(input.size(0),).long()
 
-    whole_model.eval()
-    with torch.no_grad():
-        output = whole_model(input)
+#     whole_model.eval()
+#     with torch.no_grad():
+#         output = whole_model(input)
         
-        criterion = nn.CrossEntropyLoss()
+#         criterion = nn.CrossEntropyLoss()
 
-        loss = criterion(output, label)
+#         loss = criterion(output, label)
 
-    error = loss.detach().numpy() / input.size(0)
+#     error = loss.detach().numpy() / input.size(0)
 
-    accu = (torch.argmax(output, dim = 1) == label).sum() / input.size(0)
+#     accu = (torch.argmax(output, dim = 1) == label).sum() / input.size(0)
 
-    accu = accu.detach().numpy()
-    print("pytorch model's accuracy is:", accu)
+#     accu = accu.detach().numpy()
+#     print("pytorch model's accuracy is:", accu)
 
-# transfer to tflite model
+# # transfer to tflite model
 
-## get representative data for quant
-def rep_dataset(): #test_in is global #FIXME change to tensor?
-    test_data = np.reshape(test_in, (total_samples - samples_per_device, 1, 13, 50))
-    for input_value in tf.data.Dataset.from_tensor_slices(test_data).batch(1).take(100):
-        yield [input_value]
+# ## get representative data for quant
+# def rep_dataset(): #test_in is global #FIXME change to tensor?
+#     test_data = np.reshape(test_in, (total_samples - samples_per_device, 1, 13, 50))
+#     for input_value in tf.data.Dataset.from_tensor_slices(test_data).batch(1).take(100):
+#         yield [input_value]
 
-def pytorch2tflite(torch_model,saved_dir, transfered_model):
+# def pytorch2tflite(torch_model,saved_dir, transfered_model):
 
-    if not os.path.exists(saved_dir):
-        os.makedirs(saved_dir)
+#     if not os.path.exists(saved_dir):
+#         os.makedirs(saved_dir)
 
-    # Export the trained model to ONNX
+#     # Export the trained model to ONNX
 
-    # create dummpy input # (1,1,28,28) one black and white 28 x 28 picture (mnist)
-    # if model_name == 's_model':
-    #     dummy_input = Variable(torch.randn(1, 12, 6,24)) 
-    # if model_name == 'c_model':
-    #     dummy_input = Variable(torch.randn(1, 1, 13,50))
-    dummy_input = Variable(torch.randn(1, 1, 13, 50)) # for whole model
-    torch.onnx.export(torch_model, dummy_input, f"{saved_dir}/{transfered_model}.onnx")
+#     # create dummpy input # (1,1,28,28) one black and white 28 x 28 picture (mnist)
+#     # if model_name == 's_model':
+#     #     dummy_input = Variable(torch.randn(1, 12, 6,24)) 
+#     # if model_name == 'c_model':
+#     #     dummy_input = Variable(torch.randn(1, 1, 13,50))
+#     dummy_input = Variable(torch.randn(1, 1, 13, 50)) # for whole model
+#     torch.onnx.export(torch_model, dummy_input, f"{saved_dir}/{transfered_model}.onnx")
 
-    # Load the ONNX file
-    model = onnx.load(f"{saved_dir}/{transfered_model}.onnx")
-    ## verify onnx model
-    onnx.checker.check_model(model)
-    # Import the ONNX model to Tensorflow
-    tf_rep = prepare(model)
+#     # Load the ONNX file
+#     model = onnx.load(f"{saved_dir}/{transfered_model}.onnx")
+#     ## verify onnx model
+#     onnx.checker.check_model(model)
+#     # Import the ONNX model to Tensorflow
+#     tf_rep = prepare(model)
 
-    tf_rep.export_graph(f"{saved_dir}/{transfered_model}.pb")
+#     tf_rep.export_graph(f"{saved_dir}/{transfered_model}.pb")
 
-    converter = tf.lite.TFLiteConverter.from_saved_model(f"{saved_dir}/{transfered_model}.pb")
-    # --------- add quant here ------------
-    # Convert using float fallback quantization
-    converter.optimizations = [tf.lite.Optimize.DEFAULT]
-    converter.representative_dataset = rep_dataset
-    # #using integer-only quantization #TODO
-    # converter.inference_input_type = tf.int8
-    # converter.inference_output_type = tf.int8
+#     converter = tf.lite.TFLiteConverter.from_saved_model(f"{saved_dir}/{transfered_model}.pb")
+#     # --------- add quant here ------------
+#     # Convert using float fallback quantization
+#     converter.optimizations = [tf.lite.Optimize.DEFAULT]
+#     converter.representative_dataset = rep_dataset
+#     # #using integer-only quantization #TODO
+#     # converter.inference_input_type = tf.int8
+#     # converter.inference_output_type = tf.int8
     
-    # write to tflite model
-    tflite_model = converter.convert() #TODO: add quant
-    open(f"{saved_dir}/{transfered_model}.tflite", "wb").write(tflite_model)
-    print("------ finished: from pytorch to tfl ------------")
-    print(f"tlf_model saved to: {saved_dir}/{transfered_model}.tflite")
+#     # write to tflite model
+#     tflite_model = converter.convert() #TODO: add quant
+#     open(f"{saved_dir}/{transfered_model}.tflite", "wb").write(tflite_model)
+#     print("------ finished: from pytorch to tfl ------------")
+#     print(f"tlf_model saved to: {saved_dir}/{transfered_model}.tflite")
 
-# execute transformation
-pytorch2tflite(whole_model,'tfl_saved','whole_model') #torchmodel, saved_dir, transfered_model_name
+# # execute transformation
+# pytorch2tflite(whole_model,'tfl_saved','whole_model') #torchmodel, saved_dir, transfered_model_name
 
-## --------------- evaluate pytorch and tfl model ---------------
-# Helper function to run inference on a TFLite model
-def run_tflite_model(tflite_file, test_out_indices):
-    global test_out
-    global test_in
+# ## --------------- evaluate pytorch and tfl model ---------------
+# # Helper function to run inference on a TFLite model
+# def run_tflite_model(tflite_file, test_out_indices):
+#     global test_out
+#     global test_in
 
-    # process test out
-    input = torch.tensor(test_in).float()
-    label = (torch.from_numpy(test_out).view(input.size(0),).long()).numpy()
-    # Initialize the interpreter
-    interpreter = tf.lite.Interpreter(model_path=str(tflite_file))
-    interpreter.allocate_tensors()
+#     # process test out
+#     input = torch.tensor(test_in).float()
+#     label = (torch.from_numpy(test_out).view(input.size(0),).long()).numpy()
+#     # Initialize the interpreter
+#     interpreter = tf.lite.Interpreter(model_path=str(tflite_file))
+#     interpreter.allocate_tensors()
 
-    input_details = interpreter.get_input_details()[0]
-    output_details = interpreter.get_output_details()[0]
+#     input_details = interpreter.get_input_details()[0]
+#     output_details = interpreter.get_output_details()[0]
 
-    predictions = np.zeros((len(test_out_indices),), dtype=int)
+#     predictions = np.zeros((len(test_out_indices),), dtype=int)
 
-    for i, test_image_index in enumerate(test_out_indices):
-        test_image = input[test_image_index]
-        test_label = label[test_image_index]
+#     for i, test_image_index in enumerate(test_out_indices):
+#         test_image = input[test_image_index]
+#         test_label = label[test_image_index]
 
-        # Check if the input type is quantized, then rescale input data to uint8
-        if input_details['dtype'] == np.uint8:
-            input_scale, input_zero_point = input_details["quantization"]
-            test_image = test_image / input_scale + input_zero_point
+#         # Check if the input type is quantized, then rescale input data to uint8
+#         if input_details['dtype'] == np.uint8:
+#             input_scale, input_zero_point = input_details["quantization"]
+#             test_image = test_image / input_scale + input_zero_point
 
-        test_image = np.expand_dims(test_image, axis=0).astype(input_details["dtype"])
-        interpreter.set_tensor(input_details["index"], test_image)
-        interpreter.invoke()
-        output = interpreter.get_tensor(output_details["index"])[0]
-        predictions[i] = np.argmax(output)
-    return predictions
+#         test_image = np.expand_dims(test_image, axis=0).astype(input_details["dtype"])
+#         interpreter.set_tensor(input_details["index"], test_image)
+#         interpreter.invoke()
+#         output = interpreter.get_tensor(output_details["index"])[0]
+#         predictions[i] = np.argmax(output)
+#     return predictions
 
-# Helper function to evaluate a TFLite model on all images
-def evaluate_model(tflite_file):
-    global test_in
-    global test_out
-    input = torch.tensor(test_in).float()
-    label = (torch.from_numpy(test_out).view(input.size(0),).long()).numpy()
-    test_out_indices = range(test_in.shape[0])
-    predictions = run_tflite_model(tflite_file, test_out_indices)
-    accuracy = np.sum((predictions== label)) / len(test_in)
+# # Helper function to evaluate a TFLite model on all images
+# def evaluate_model(tflite_file):
+#     global test_in
+#     global test_out
+#     input = torch.tensor(test_in).float()
+#     label = (torch.from_numpy(test_out).view(input.size(0),).long()).numpy()
+#     test_out_indices = range(test_in.shape[0])
+#     predictions = run_tflite_model(tflite_file, test_out_indices)
+#     accuracy = np.sum((predictions== label)) / len(test_in)
 
-    print('TFLite model accuracy is %.4f (Number of test samples=%d)' % (
-        accuracy, len(test_in)))
+#     print('TFLite model accuracy is %.4f (Number of test samples=%d)' % (
+#         accuracy, len(test_in)))
 
-## ---------- eva ----------
-TF_model = 'tfl_saved/whole_model.tflite' # specific file location
-evaluate_model(TF_model)
-whole_validate(test_in, test_out)
-exit()
+# ## ---------- eva ----------
+# TF_model = 'tfl_saved/whole_model.tflite' # specific file location
+# evaluate_model(TF_model)
+# whole_validate(test_in, test_out)
+# exit()
 plt.figure(1)
 plt.ion()
 plt.show()

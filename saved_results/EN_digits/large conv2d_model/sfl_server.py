@@ -1,28 +1,25 @@
-# import serial
-# from serial.tools.list_ports import comports
+import serial
+from serial.tools.list_ports import comports
 
 import struct
 import time
-
 import matplotlib.pyplot as plt
 import threading
 import time
 import json
 import os
 import random
-
 import logging
 import sys
-
+import copy
 random_seed=1234
 import torch
 import torch.nn as nn
 import torch.nn.init as init
 import numpy as np
+from models import server_conv2d_model, server_model, client_conv2d_model, client_model
 # import librosa
 from third_party_package import speechpy
-from models import server_conv2d_model, server_conv_model, server_model, client_conv2d_model, client_conv_model, client_model
-
 torch.manual_seed(random_seed)
 torch.cuda.manual_seed(random_seed)
 torch.cuda.manual_seed_all(random_seed)
@@ -30,14 +27,6 @@ np.random.seed(random_seed)
 random.seed(random_seed)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
-
-#import for pytorch to tflite
-import onnx
-from collections import OrderedDict
-import tensorflow as tf
-from torch.autograd import Variable
-from onnx_tf.backend import prepare
-
 
 formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
 
@@ -69,74 +58,55 @@ model_log_file = "./log.txt"
 logger = setup_logger('main_logger', model_log_file, level=logging.DEBUG)
 
 
+random.seed(4321)
+np.random.seed(4321)
+
+epoch_size = 3 # default = 1
+
 batch_size = 10 # Must be even, hsa to be split into 2 types of samples
-
-
 running_batch_accu = 0
 running_batch_accu_list = []
-
-
-epoch_size = 3 # 3,default = 1
-step_size = 1 # The real batch size
+# experiment = 'digits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
 experiment = 'EN_digits' # 'iid', 'no-iid', 'train-test', 'custom', 'digits'
-# model_type = "fc"
-model_type = "conv2d"
 
-momentum = 0.6
-learningRate= 0.005
-number_hidden = 1
-hidden_size = 128
-
-if model_type == "fc" and experiment == "EN_digits":
-    momentum = 0.7
-    learningRate= 0.0005
-    number_hidden = 0
-    hidden_size = 128
-
-if model_type == "conv2d" and experiment == "EN_digits":
-    #best
-    momentum = 0.5
-    learningRate= 0.005
-    number_hidden = 1
-    hidden_size = 256 #256, 128
-    #TODO: change
-
-max_accu = 0.    
+num_simulated_clients = 8
+num_devices = 2
 
 # initialize client-side model
-size_hidden_nodes = 25
+size_hidden_nodes = 1728
 if experiment == "custom":
     size_output_nodes = 5
     samples_per_device = 250 # Amount of samples of each word to send to each device
-    total_samples = 250
-elif experiment == 'digits':
-    samples_per_device = 1260 # Amount of samples of each word to send to each device
-    size_output_nodes = 7
-    batch_size = 14 # Must be even, hsa to be split into 2 types of samples
-    total_samples = 1400
 elif experiment == 'EN_digits':
-    samples_per_device = 6300 # Amount of samples of each word to send to each device
+    samples_per_device = 630 # Amount of samples of each word to send to each device
     size_output_nodes = 7
     batch_size = 14 # Must be even, hsa to be split into 2 types of samples
-    total_samples = 7000
+elif experiment == 'digits':
+    samples_per_device = 315 # Amount of samples of each word to send to each device
+    size_output_nodes = 7
+    batch_size = 14 # Must be even, hsa to be split into 2 types of samples
 else: # mountain datasets
-    size_output_nodes = last_layer_input_size
-# neuron_layer_2nd = 2 * size_hidden_nodes
+    size_output_nodes = 3
+    samples_per_device = 300 # Amount of samples of each word to send to each device
 
-# size_layer_2nd = (size_hidden_nodes+1)*neuron_layer_2nd
-# layer_2nd = np.random.uniform(-0.5, 0.5, size_layer_2nd).astype('float32')
-# layer_2nd_weight_updates = np.zeros_like(layer_2nd)
+NFilter = 12
+size_hidden_layer = NFilter * 9
+hidden_layer = (np.random.normal(size=(size_hidden_layer, )) * np.sqrt(2./size_hidden_layer)).astype('float32')
 
-#TODO: we will use pytorch on server-side model to automate the training.
+logger.debug("\nTraining Setting: dataset {}, Total Round {}, data_per_round {}". format(experiment, epoch_size * int(samples_per_device/batch_size), batch_size))
 
 # initialize server-side model #TODO: step - 1 [we simply split current architecture] step - 2: after this is done, we extend architecture using pytorch.
 size_output_layer = (size_hidden_nodes+1)*size_output_nodes # why we need one more row
 output_layer = np.random.uniform(-0.5, 0.5, size_output_layer).astype('float32')
 output_weight_updates  = np.zeros_like(output_layer)
 
+momentum = 0.5
+learningRate= 0.005
+number_hidden = 1
+hidden_size = 256 #256, 128
 
-
-logger.debug("Model Setting: model_type: {}, momentum {}, lr {}, number_hidden {}, hidden_size {}". format(model_type, momentum, learningRate, number_hidden, hidden_size))
+logger.debug("Model Setting: momentum {}, lr {}, number_hidden {}, hidden_size {}". format(momentum, learningRate, number_hidden, hidden_size))
+max_accu = 0
 
 def init_weights(m):
     if isinstance(m, nn.Linear):
@@ -151,33 +121,26 @@ def init_weights(m):
       init.kaiming_normal(m.weight)
       if m.bias is not None:
         m.bias.data.zero_()
-# def init_weights(m):
-#     if type(m) == nn.Linear:
-#         torch.nn.init.uniform_(m.weight, a = -0.5, b = 0.5)
-#         torch.nn.init.uniform_(m.bias, a = -0.5, b = 0.5)
-#     if type(m) == nn.Conv2d:
-#         torch.nn.init.uniform_(m.weight, a = -0.5, b = 0.5)
-#         torch.nn.init.uniform_(m.bias, a = -0.5, b = 0.5)
 
 
-if model_type == "fc":
-    s_model = server_model(num_class = size_output_nodes, number_hidden = number_hidden, hidden_size = hidden_size, input_size = size_hidden_nodes)
-
-    c_model = client_model()
-elif model_type == "conv1d":
-    s_model = server_conv_model(num_class = size_output_nodes, number_hidden = number_hidden, hidden_size = hidden_size)
-
-    c_model = client_conv_model()
-elif model_type == "conv2d":
-    s_model = server_conv2d_model(num_class = size_output_nodes, number_hidden = number_hidden, hidden_size = hidden_size)
-
-    c_model = client_conv2d_model()
-
-c_model.apply(init_weights)
+s_model = server_conv2d_model(num_class = size_output_nodes, number_hidden = number_hidden, hidden_size = hidden_size, input_size = size_hidden_nodes)
 s_model.apply(init_weights)
-
+c_model = client_conv2d_model()
+# print(c_model.state_dict())
+c_model.load_state_dict({'client.0.weight': torch.tensor(hidden_layer).view(NFilter,1,3,3).float()})
 s_optimizer = torch.optim.SGD(list(s_model.parameters()), lr=learningRate, momentum=momentum, weight_decay=5e-4)
 c_optimizer = torch.optim.SGD(list(c_model.parameters()), lr=learningRate, momentum=momentum, weight_decay=5e-4)
+
+if num_simulated_clients > 0:
+    
+    list_simu_c_model = []
+    list_simu_c_optimizer = []
+    for i in range(num_simulated_clients):
+        simu_c_model = client_conv2d_model()
+        list_simu_c_model.append(copy.deepcopy(simu_c_model))
+        list_simu_c_model[i].load_state_dict({'client.0.weight': torch.tensor(hidden_layer).view(NFilter,1,3,3).float()})
+        list_simu_c_optimizer.append(torch.optim.SGD(list(list_simu_c_model[i].parameters()), lr=learningRate, momentum=momentum, weight_decay=5e-4))
+# s_optimizer = torch.optim.Adam(list(s_model.parameters()), lr=learningRate)
 
 
 pauseListen = False # So there are no threads reading the serial input at the same time
@@ -194,31 +157,6 @@ blau_files = [file for file in os.listdir("datasets/colors") if file.startswith(
 test_montserrat_files = [file for file in os.listdir("datasets/test/") if file.startswith("montserrat")]
 test_pedraforca_files = [file for file in os.listdir("datasets/test") if file.startswith("pedraforca")]
 
-# digits_silence_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("silence")]
-# digits_one_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("one")]
-# digits_two_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("two")]
-# digits_three_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("three")]
-# digits_four_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("four")]
-# digits_five_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("five")]
-# digits_unknown_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("unknown")]
-
-# digits_silence_files_EN = [file for file in os.listdir("datasets/CN_digits") if file.startswith("silence") and int(file.split(".")[1])>=500]
-# digits_one_files_EN = [file for file in os.listdir("datasets/CN_digits") if file.startswith("one") and int(file.split(".")[1])>=500]
-# digits_two_files_EN = [file for file in os.listdir("datasets/CN_digits") if file.startswith("two") and int(file.split(".")[1])>=500]
-# digits_three_files_EN = [file for file in os.listdir("datasets/CN_digits") if file.startswith("three") and int(file.split(".")[1])>=500]
-# digits_four_files_EN = [file for file in os.listdir("datasets/CN_digits") if file.startswith("four") and int(file.split(".")[1])>=500]
-# digits_five_files_EN = [file for file in os.listdir("datasets/CN_digits") if file.startswith("five") and int(file.split(".")[1])>=500]
-# digits_unknown_files_EN = [file for file in os.listdir("datasets/CN_digits") if file.startswith("unknown") and int(file.split(".")[1])>=500]
-
-# digits_silence_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("silence") and int(file.split(".")[1])>=500]
-# digits_one_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("one") and int(file.split(".")[1])>=500]
-# digits_two_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("two") and int(file.split(".")[1])>=500]
-# digits_three_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("three") and int(file.split(".")[1])>=500]
-# digits_four_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("four") and int(file.split(".")[1])>=500]
-# digits_five_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("five") and int(file.split(".")[1])>=500]
-# digits_unknown_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("unknown") and int(file.split(".")[1])>=500]
-
-
 if experiment == "digits":
     digits_silence_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("silence") and int(file.split(".")[1])<500]
     digits_one_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("one") and int(file.split(".")[1])<500]
@@ -227,8 +165,7 @@ if experiment == "digits":
     digits_four_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("four") and int(file.split(".")[1])<500]
     digits_five_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("five") and int(file.split(".")[1])<500]
     digits_unknown_files = [file for file in os.listdir("datasets/CN_digits") if file.startswith("unknown") and int(file.split(".")[1])<500]
-
-if experiment == "EN_digits":
+elif experiment == "EN_digits":
     digits_silence_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("silence") and int(file.split(".")[1])>=500]
     digits_one_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("one") and int(file.split(".")[1])>=500]
     digits_two_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("two") and int(file.split(".")[1])>=500]
@@ -236,8 +173,6 @@ if experiment == "EN_digits":
     digits_four_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("four") and int(file.split(".")[1])>=500]
     digits_five_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("five") and int(file.split(".")[1])>=500]
     digits_unknown_files = [file for file in os.listdir("datasets/EN_digits") if file.startswith("unknown") and int(file.split(".")[1])>=500]
-
-
 
 random.shuffle(digits_silence_files)
 random.shuffle(digits_one_files)
@@ -273,7 +208,7 @@ def convert_string_to_array(string, one_hot = False):
 
 def server_compute(Hidden, target, only_forward = False):
     input = torch.tensor(Hidden, requires_grad=True).float()
-    label = torch.argmax(torch.from_numpy(target).float())
+    label = torch.argmax(torch.from_numpy(target).float()).view(1,)
     s_model.train()
     s_optimizer.zero_grad()
     
@@ -303,6 +238,31 @@ def server_compute(Hidden, target, only_forward = False):
         return accu, error
 
 
+
+def simu_c_compute(train_in, train_out, client_id = 0):
+    input = torch.tensor(train_in).float()
+    label = torch.tensor(train_out).long().view(1,)
+    s_model.train()
+    list_simu_c_model[client_id].train()
+    s_optimizer.zero_grad()
+    list_simu_c_optimizer[client_id].zero_grad()
+    
+    output = s_model(list_simu_c_model[client_id](input))
+    criterion = nn.CrossEntropyLoss()
+    loss = criterion(output, label)
+
+    error = loss.detach().numpy()
+
+    loss.backward()
+
+    s_optimizer.step()
+    list_simu_c_optimizer[client_id].step()
+    
+    accu = (torch.argmax(output) == label).sum()
+    accu = accu.detach().numpy()
+
+    return accu, error
+
 def server_validate(test_in, test_out):
     # multiple_batch
     input = torch.tensor(test_in).float()
@@ -312,15 +272,14 @@ def server_validate(test_in, test_out):
     s_model.eval()
 
     c_model.eval()
-    with torch.no_grad():
-        output = s_model(c_model(input))
-        
-        criterion = nn.CrossEntropyLoss()
 
-        loss = criterion(output, label)
+    output = s_model(c_model(input))
+    
+    criterion = nn.CrossEntropyLoss()
+
+    loss = criterion(output, label)
 
     error = loss.detach().numpy() / input.size(0)
-
 
     accu = (torch.argmax(output, dim = 1) == label).sum() / input.size(0)
 
@@ -328,37 +287,47 @@ def server_validate(test_in, test_out):
 
     return error, accu
 
-def server_train(train_in, train_out):
+def server_compute_old(Hidden, target, only_forward = False):
 
-    input = torch.tensor(train_in).float()
+    #TODO: matrix multiplication optimization
+
+    # Compute forward and error
+    error = 0.0
+    output_array = np.zeros((size_output_nodes,))
+    output_delta_array = np.zeros((size_output_nodes,))
+    for i in range(size_output_nodes):
+        # Compute bias
+        accu = output_layer[size_hidden_nodes * size_output_nodes + i]
+        for j in range(size_hidden_nodes):
+            accu += Hidden[j] * output_layer[j*size_output_nodes + i] #[1, 25] * [25, 3]
+
+        output_array[i] = 1.0 / (1.0 + np.exp(-accu))
+        output_delta_array[i] = (target[i] - output_array[i]) * output_array[i] * (1.0 - output_array[i])
+        error += 1/size_output_nodes * (target[i] - output_array[i]) * (target[i] - output_array[i])
+
     
-    label = torch.from_numpy(train_out).view(input.size(0),).long()
+    if not only_forward:
+        # Compute backward and gradients w.r.t. to activaiton (error_array) to client
+        error_array = np.zeros((size_hidden_nodes,))
+        for i in range(size_hidden_nodes):
+            for j in range(size_output_nodes):
+                error_array[i] += output_layer[i*size_output_nodes + j] * output_delta_array[j] #[25, 3] * [3, 1]
+        
+        # Update weights
+        for i in range(size_output_nodes):
+            output_weight_updates[size_hidden_nodes * size_output_nodes + i] = learningRate * output_delta_array[i] + momentum * output_weight_updates[size_hidden_nodes * size_output_nodes + i] #bias update
+            output_layer[size_hidden_nodes * size_output_nodes + i] += output_weight_updates[size_hidden_nodes * size_output_nodes + i]
+            for j in range(size_hidden_nodes):
+                output_weight_updates[j*size_output_nodes + i] = learningRate * Hidden[j] * output_delta_array[i] + momentum * output_weight_updates[j*size_output_nodes + i]
+                output_layer[j*size_output_nodes + i] = output_weight_updates[j*size_output_nodes + i]
 
-    s_model.train()
-    c_model.train()
+    if not only_forward:
+        return error, error_array
+    else:
+        return error
 
-    s_optimizer.zero_grad()
-    c_optimizer.zero_grad()
-
-    z_private = c_model(input)
-    output = s_model(z_private)
     
-    criterion = nn.CrossEntropyLoss()
 
-    loss = criterion(output, label)
-
-    error = loss.detach().numpy()
-
-    loss.backward()
-
-    s_optimizer.step()
-    c_optimizer.step()
-    
-    accu = (torch.argmax(output, dim = 1) == label).sum()
-    accu = accu.detach().numpy()
-    # print(accu)
-    return error, accu
-    
 def print_until_keyword(keyword, arduino):
     while True: 
         msg = arduino.readline().decode()
@@ -465,6 +434,45 @@ def sendSamplesIIDDigits(device, deviceIndex, batch_size, batch_index):
         num_button = 7
         sendSample(device, 'datasets/CN_digits/'+filename, num_button, deviceIndex)
 
+
+def sendSamplesIIDENDigits(device, deviceIndex, batch_size, batch_index):
+    global digits_silence_files, digits_one_files, digits_two_files, digits_three_files, digits_four_files, digits_five_files, digits_unknown_files
+
+    # each_sample_amt = int(batch_size/2)
+
+    start = (deviceIndex*samples_per_device) + (batch_index * batch_size)
+    end = (deviceIndex*samples_per_device) + (batch_index * batch_size) + batch_size
+    real_start = start // 7
+    real_end = (end - start) // 7 + start // 7
+    for i in range(real_start, real_end):
+        filename = digits_silence_files[i]
+        num_button = 1
+        sendSample(device, 'datasets/EN_digits/'+filename, num_button, deviceIndex)
+        
+        filename = digits_one_files[i]
+        num_button = 2
+        sendSample(device, 'datasets/EN_digits/'+filename, num_button, deviceIndex)
+
+        filename = digits_two_files[i]
+        num_button = 3
+        sendSample(device, 'datasets/EN_digits/'+filename, num_button, deviceIndex)
+
+        filename = digits_three_files[i]
+        num_button = 4
+        sendSample(device, 'datasets/EN_digits/'+filename, num_button, deviceIndex)
+
+        filename = digits_four_files[i]
+        num_button = 5
+        sendSample(device, 'datasets/EN_digits/'+filename, num_button, deviceIndex)
+
+        filename = digits_five_files[i]
+        num_button = 6
+        sendSample(device, 'datasets/EN_digits/'+filename, num_button, deviceIndex)
+
+        filename = digits_unknown_files[i]
+        num_button = 7
+        sendSample(device, 'datasets/EN_digits/'+filename, num_button, deviceIndex)
+
 # Batch size: The amount of samples to send
 def sendSamplesIID(device, deviceIndex, batch_size, batch_index):
     global montserrat_files, pedraforca_files, mountains
@@ -518,7 +526,6 @@ def getSamplesIID(batch_size, batch_start_index):
         label_list_array = np.array(label_list).reshape(-1, 1)
     return input_list_array, label_list_array
 
-
 def raw_to_mfcc(filename):
         # with open('./datasets/CN_digits/'+filename) as f:
     with open(f'./datasets/{experiment}/'+filename) as f:
@@ -541,7 +548,7 @@ def getSamplesIIDDigits(batch_size, batch_start_index):
     global digits_silence_files, digits_one_files, digits_two_files, digits_three_files, digits_four_files, digits_five_files, digits_unknown_files
 
     # each_sample_amt = int(batch_size/2)
-    
+
     start = batch_start_index
     end = batch_start_index + batch_size
     real_start = start // 7
@@ -549,7 +556,7 @@ def getSamplesIIDDigits(batch_size, batch_start_index):
     
     input_list = []
     label_list = []
-    
+
     for i in range(real_start, real_end):
         
         filename = digits_silence_files[i]
@@ -558,6 +565,8 @@ def getSamplesIIDDigits(batch_size, batch_start_index):
             input_array = np.load("processed_datasets/{}/{}.npy".format(experiment,filename.split("/")[-1].replace(".json", "")))
         except:
             input_array = raw_to_mfcc(filename)
+
+        
         input_list.append(input_array)
         label_list.append(num_button - 1) # need to minus oen to act as label.
         
@@ -693,22 +702,25 @@ def sendSample(device, samplePath, num_button, deviceIndex, only_forward = False
 
             # Perform server-side computation (forward/backward)
             hidden_activation = convert_string_to_array(outputs)
+            hidden_activation = hidden_activation.reshape(1,6,24,NFilter).transpose(0, 3, 1, 2)
             label = convert_string_to_array(str(nb), one_hot = True)
             forward_accu, forward_error, error_array = server_compute(hidden_activation, label, only_forward= False)
             
+            error_array = error_array.flatten()
+
             # Send Error Array to client to continue backward #TODO: implement this
             for i in range(size_hidden_nodes): # hidden layer
-                d.read() # wait until confirmatio
+                device.read() # wait until confirmatio
                 float_num = error_array[i]
                 data = struct.pack('f', float_num)
-                d.write(data)
+                device.write(data)
 
         device.readline().decode() # Accept 'Done' command
 
         ne = device.readline()[:-2]
 
         n_epooch = int(ne)
-        running_batch_accu += forward_accu
+        running_batch_accu += forward_accu[0]
         graph.append([n_epooch, forward_error, deviceIndex])
 
 def sendTestSamples(device, deviceIndex):
@@ -776,7 +788,7 @@ def plot_train_accu():
     colors = ['r', 'g', 'b', 'y']
     markers = ['-', '--', ':', '-.']
     #devices =  [x[2] for x in graph]
-    # running_batch_accu_list
+    running_batch_accu_list
     # for device_index, device in enumerate(devices):
     #     epoch = [x[0] for x in graph if x[2] == device_index]
     #     error = [x[1] for x in graph if x[2] == device_index]
@@ -820,7 +832,7 @@ def listenDevice(device, deviceIndex):
             print("Paused...")
             time.sleep(0.1)
 
-        d.timeout = None
+        device.timeout = None
         msg = device.readline().decode()
         if (len(msg) > 0):
             print(f'({device.port}):', msg, end="")
@@ -888,15 +900,15 @@ def sendModel(d, hidden_layer, output_layer):
 
 
 def startFL():
-    global devices_connected, hidden_layer, output_layer, pauseListen
+    global devices_connected, hidden_layer, output_layer, pauseListen, max_accu
 
     pauseListen = True
 
     print('Model Aggregation...')
     old_devices_connected = devices_connected
     devices_connected = []
-    devices_hidden_layer = np.empty((len(devices), size_hidden_layer), dtype='float32')
-    devices_output_layer = np.empty((len(devices), size_output_layer), dtype='float32')
+    devices_hidden_layer = np.empty((len(devices) + num_simulated_clients, size_hidden_layer), dtype='float32')
+    devices_output_layer = np.empty((len(devices) + num_simulated_clients, size_output_layer), dtype='float32')
     devices_num_epochs = []
     
     ##################
@@ -915,14 +927,49 @@ def startFL():
     # Processing models
     ####################
 
+    if num_simulated_clients > 0:
+        for i in range(num_simulated_clients):
+            devices_hidden_layer[len(devices) + i, :] = list_simu_c_model[i].state_dict()['client.0.weight'].numpy().flatten()
+    # print(devices_hidden_layer)
     # if sum == 0, any device made any epoch
     if sum(devices_num_epochs) > 0:
         # We can use weights to change the importance of each device
         # example weights = [1, 0.5] -> giving more importance to the first device...
         # is like percentage of importance :  sum(a * weights) / sum(weights)
         ini_time = time.time() * 1000
-        hidden_layer = np.average(devices_hidden_layer, axis=0, weights=devices_num_epochs)
-        output_layer = np.average(devices_output_layer, axis=0, weights=devices_num_epochs)
+        # hidden_layer = np.average(devices_hidden_layer, axis=0, weights=devices_num_epochs)
+        hidden_layer = np.average(devices_hidden_layer, axis=0)
+        # output_layer = np.average(devices_output_layer, axis=0, weights=devices_num_epochs)
+        output_layer = np.average(devices_output_layer, axis=0)
+
+    # Doing validation
+    c_model.load_state_dict({'client.0.weight': torch.tensor(hidden_layer).view(NFilter,1,3,3).float()})
+
+    if experiment == "digits":
+        test_in, test_out = getSamplesIIDDigits(35, 315)
+        test_in = np.reshape(test_in, (35, 1, 13, 50))
+        error, accu = server_validate(test_in, test_out)
+        logger.debug(f"Validation Accuracy {100 * accu}%\n")
+        val_graph.append([error, accu, 0])
+    elif experiment == "EN_digits":
+        test_in, test_out = getSamplesIIDDigits(700, 6300)
+        test_in = np.reshape(test_in, (700, 1, 13, 50))
+        error, accu = server_validate(test_in, test_out)
+        logger.debug(f"Validation Accuracy {100 * accu}%\n")
+        val_graph.append([error, accu, 0])
+
+        if accu > max_accu:
+            max_accu = accu
+            torch.save(c_model.state_dict(), "models/c_model.pt")
+            torch.save(s_model.state_dict(), "models/s_model.pt")
+        
+
+    elif experiment == "iid":
+        test_in, test_out = getSamplesIID(60, 300)
+
+        error, accu = server_validate(test_in, test_out)
+        logger.debug(f"Validation Accuracy {100 * accu}%\n")
+        val_graph.append([error, accu, 0])
 
     #################
     # Sending models
@@ -935,6 +982,9 @@ def startFL():
         threads.append(thread)
     for thread in threads: thread.join() # Wait for all the threads to end
 
+    if num_simulated_clients > 0:
+        for i in range(num_simulated_clients):
+            list_simu_c_model[i].load_state_dict({'client.0.weight': torch.tensor(hidden_layer).view(NFilter,1,3,3).float()})
 
     pauseListen = False
 
@@ -944,224 +994,135 @@ def set_button(device, button):
     device.write(button)
     print(f"press/hold botton {button} on {device.port}")
 
+# getDevices()
 
-devices = [0]
+global devices, devices_connected
+
+available_ports = comports()
+print("Available ports:")
+for available_port in available_ports:
+    print(available_port)
+
+if num_devices == 1:
+    try:
+        print("Access default port")
+        devices = [serial.Serial('/dev/ttyACM0', 9600)]
+    except:
+        print("Access alternative port")
+        devices = [serial.Serial('COM7', 9600)]
+    devices_connected = devices
+elif num_devices == 2:
+    try:
+        print("Access default port")
+        devices = [serial.Serial('/dev/ttyACM0', 9600), serial.Serial('/dev/ttyACM1', 9600)]
+    except:
+        print("Access alternative port")
+        devices = [serial.Serial('COM7', 9600), serial.Serial('COM8', 9600)]
+    devices_connected = devices
+
+
+
+# Send the blank model to all the devices
+threads = []
+print("Number of devices is {}".format(str(devices)))
+for i, d in enumerate(devices):
+    thread = threading.Thread(target=init_network, args=(hidden_layer, output_layer, d, i))
+    thread.daemon = True
+    thread.start()
+    threads.append(thread)
+for thread in threads: thread.join() # Wait for all the threads to end
+
+ini_time = time.time()
+
+# # Press a dummy virtual button to start the loop
+# threads = []
+# for deviceIndex, device in enumerate(devices):
+#     thread = threading.Thread(target=set_button, args=(device, 5))
+#     thread.daemon = True
+#     thread.start()
+#     threads.append(thread)
+# for thread in threads: thread.join() # Wait for all the threads to end
+
 
 # Train the device
-if experiment == 'digits':
-    train_in, train_out = getSamplesIIDDigits(samples_per_device, 0)
-    test_in, test_out = getSamplesIIDDigits(total_samples - samples_per_device, samples_per_device)
-if experiment == 'EN_digits':
-    train_in, train_out = getSamplesIIDDigits(samples_per_device, 0)
-    test_in, test_out = getSamplesIIDDigits(total_samples - samples_per_device, samples_per_device)
-
-train_in = np.reshape(train_in, (samples_per_device, 650))
-test_in = np.reshape(test_in, (total_samples - samples_per_device, 650))
-
-# init_time = time.time()
-
-# for epoch in range(epoch_size):
-    
-#     total_round = int(samples_per_device/batch_size)
-    
-#     # shuffle train data
-#     permute_idx = np.random.permutation(samples_per_device)
-#     train_in[:, ] = train_in[permute_idx, ]
-#     train_out[:, ] = train_out[permute_idx, ]
-
-#     for batch in range(total_round):
-#         logger.debug("Epoch {}/{}, Round {}/{} (data per round: {})".format(epoch, epoch_size, batch, total_round, batch_size))
-#         running_batch_accu = 0
+for epoch in range(epoch_size):
+    total_round = int(samples_per_device/batch_size)
+    for batch in range(total_round):
         
-#         for step in range(batch_size//step_size):
-#             batch_train_in = train_in[batch*batch_size+step*step_size:batch*batch_size+(step+1)*step_size,:]
-#             batch_train_out = train_out[batch*batch_size+step*step_size:batch*batch_size+(step+1)*step_size,:]
-
-#             train_error, train_accu = server_train(batch_train_in, batch_train_out)
-
-#             running_batch_accu += train_accu
-            
-#             graph.append([batch, train_error, 0])
-
-#         val_error, val_accu = server_validate(test_in, test_out)
-
-#         logger.debug(f"Validation Accuracy {100 * val_accu}%\n")
-
-#         if val_accu > max_accu:
-#             max_accu = val_accu
-#             torch.save(c_model.state_dict(), "./c_model.pth")
-#             torch.save(s_model.state_dict(), "./s_model.pth")
-
-#         val_graph.append([val_error, val_accu, 0])
-    
-#         logger.debug("Training Accuracy is {}%".format(100 * running_batch_accu/batch_size))
-#         # print(running_batch_accu, batch_size)
-#         running_batch_accu_list.append(running_batch_accu/batch_size)
+        logger.debug("Epoch {}/{}, Round {}/{} (data per round: {})".format(epoch, epoch_size, batch, total_round, batch_size))
         
-# train_time = time.time() - init_time
-# logger.debug("Final Best Accuracy: {}.".format(max_accu))
-
-# # save model if needed
-# torch.save(c_model.state_dict(),'c_model.pth')
-# torch.save(s_model.state_dict(),'s_model.pth')
-
-
-
-save_file_name = "large_conv2d_model_momentum0.6"
-
-c_path = f"./saved_results/EN_digits/{save_file_name}/c_model.pt"
-s_path = f"./saved_results/EN_digits/{save_file_name}/s_model.pt"
-
-# create the whole model
-class Mywhole_model(nn.Module):
-    def __init__(self, model_c, model_s):
-        super(Mywhole_model, self).__init__()
-        self.model_c=model_c
-        self.model_s=model_s
-
-    def forward(self,x):
-        x=self.model_c(x)
-        x=self.model_s(x)
-        return x
-## if c_model and s_model are loaded from saved models: 
-modelC= client_conv2d_model()
-modelS= server_conv2d_model(num_class = size_output_nodes, number_hidden = number_hidden, hidden_size = hidden_size)
-
-modelC.load_state_dict(torch.load(c_path))
-modelS.load_state_dict(torch.load(s_path))
-
-## if need to save model
-# torch.save(whole_model, 'whole_model.pt')
-whole_model=Mywhole_model(modelC, modelS)
-## if need to load model
-# whole_model = torch.load("whole_model.pt")
-
-# whole model validate function
-def whole_validate(test_in, test_out):
-    # multiple_batch
-    input = torch.tensor(test_in).float()
-    
-    label = torch.from_numpy(test_out).view(input.size(0),).long()
-
-    whole_model.eval()
-    with torch.no_grad():
-        output = whole_model(input)
         
-        criterion = nn.CrossEntropyLoss()
 
-        loss = criterion(output, label)
+        for deviceIndex, device in enumerate(devices):
+            # logger.debug("(Client-{}) Training Starts".format(deviceIndex))
+            running_batch_accu = 0
+            if experiment == 'iid' or experiment == 'train-test':
+                sendSamplesIID(device, deviceIndex, batch_size, batch)
+            elif experiment == 'no-iid':
+                sendSamplesNonIID(device, deviceIndex, batch_size, batch)
+            elif experiment == 'custom':
+                sendSamplesIIDCustom(device, deviceIndex, batch_size, batch)
+            elif experiment == 'digits':
+                sendSamplesIIDDigits(device, deviceIndex, batch_size, batch)
+            elif experiment == 'EN_digits':
+                sendSamplesIIDENDigits(device, deviceIndex, batch_size, batch)
+            running_batch_accu_list.append(running_batch_accu/batch_size)
+            logger.debug("(Real Client-{}) Training Accuracy is {}%".format(deviceIndex, 100 * running_batch_accu/batch_size))
+        # for deviceIndex, device in enumerate(devices):
+        #     if experiment == 'iid' or experiment == 'train-test':
+        #         thread = threading.Thread(target=sendSamplesIID, args=(device, deviceIndex, batch_size, batch))
+        #     elif experiment == 'no-iid':
+        #         thread = threading.Thread(target=sendSamplesNonIID, args=(device, deviceIndex, batch_size, batch))
+        #     elif experiment == 'custom':
+        #         thread = threading.Thread(target=sendSamplesIIDCustom, args=(device, deviceIndex, batch_size, batch))
+        #     elif experiment == 'digits':
+        #         thread = threading.Thread(target=sendSamplesIIDDigits, args=(device, deviceIndex, batch_size, batch))
+        #     elif experiment == 'EN_digits':
+        #         thread = threading.Thread(target=sendSamplesIIDENDigits, args=(device, deviceIndex, batch_size, batch))
 
-    error = loss.detach().numpy() / input.size(0)
+        #     thread.daemon = True
+        #     thread.start()
+        #     threads.append(thread)
+        # for thread in threads: thread.join() # Wait for all the threads to end
+        if num_simulated_clients > 0:
+            for i in range(num_simulated_clients):
+                running_batch_accu = 0
+                # print("getting audio files from {} to {}".format(samples_per_device * (len(devices) + i) + batch * batch_size, samples_per_device * (len(devices) + i) + batch * batch_size + batch_size))
+                batch_train_in, batch_train_out = getSamplesIIDDigits(batch_size, samples_per_device * (len(devices) + i) + batch * batch_size)
+                batch_train_in = batch_train_in.reshape(batch_size, -1)
+                batch_train_out = batch_train_out.reshape(batch_size, -1)
+                for j in range(batch_size):
+                    
+                    train_in = batch_train_in[j,].reshape(1, 1, 13, 50)
+                    train_out = batch_train_out[j].reshape(1,)
+                    accu, error = simu_c_compute(train_in, train_out, i)
+                    running_batch_accu += accu
+                running_batch_accu_list.append(running_batch_accu/batch_size)
+                logger.debug("(Simulated Client-{}) Training Accuracy is {}%".format(len(devices)+i, 100 * running_batch_accu/batch_size))
 
-    accu = (torch.argmax(output, dim = 1) == label).sum() / input.size(0)
-
-    accu = accu.detach().numpy()
-    print("pytorch model's accuracy is:", accu)
-
-# transfer to tflite model
-
-## get representative data for quant
-def rep_dataset(): #test_in is global #FIXME change to tensor?
-    test_data = np.reshape(test_in, (total_samples - samples_per_device, 650))
-    for input_value in tf.data.Dataset.from_tensor_slices(test_data).batch(1).take(100):
-        yield [input_value]
-
-def pytorch2tflite(torch_model,saved_dir, transfered_model):
-
-    if not os.path.exists(saved_dir):
-        os.makedirs(saved_dir)
-
-    # Export the trained model to ONNX
-
-    # create dummpy input # (1,1,28,28) one black and white 28 x 28 picture (mnist)
-    # if model_name == 's_model':
-    #     dummy_input = Variable(torch.randn(1, 12, 6,24)) 
-    # if model_name == 'c_model':
-    #     dummy_input = Variable(torch.randn(1, 1, 13,50))
-    dummy_input = Variable(torch.randn(650,)) # for whole model
-    torch.onnx.export(torch_model, dummy_input, f"{saved_dir}/{transfered_model}.onnx")
-
-    # Load the ONNX file
-    model = onnx.load(f"{saved_dir}/{transfered_model}.onnx")
-    ## verify onnx model
-    onnx.checker.check_model(model)
-    # Import the ONNX model to Tensorflow
-    tf_rep = prepare(model)
-
-    tf_rep.export_graph(f"{saved_dir}/{transfered_model}.pb")
-
-    converter = tf.lite.TFLiteConverter.from_saved_model(f"{saved_dir}/{transfered_model}.pb")
-    # --------- add quant here ------------
-    # Convert using float fallback quantization
-    converter.optimizations = [tf.lite.Optimize.DEFAULT]
-    converter.representative_dataset = rep_dataset
-    # #using integer-only quantization #TODO
-    # converter.inference_input_type = tf.int8
-    # converter.inference_output_type = tf.int8
+        startFL()
+        
+        
     
-    # write to tflite model
-    tflite_model = converter.convert() #TODO: add quant
-    open(f"{saved_dir}/{transfered_model}.tflite", "wb").write(tflite_model)
-    print("------ finished: from pytorch to tfl ------------")
-    print(f"tlf_model saved to: {saved_dir}/{transfered_model}.tflite")
+train_time = time.time()-ini_time
 
-# execute transformation
-pytorch2tflite(whole_model,'tfl_saved','whole_model') #torchmodel, saved_dir, transfered_model_name
+if experiment == 'train-test':
+    for deviceIndex, device in enumerate(devices):
+        thread = threading.Thread(target=sendTestSamples, args=(device, deviceIndex))
+        thread.daemon = True
+        thread.start()
+        threads.append(thread)
+    for thread in threads: thread.join() # Wait for all the threads to end
 
-## --------------- evaluate pytorch and tfl model ---------------
-# Helper function to run inference on a TFLite model
-def run_tflite_model(tflite_file, test_out_indices):
-    global test_out
-    global test_in
 
-    # process test out
-    input = torch.tensor(test_in).float()
-    label = (torch.from_numpy(test_out).view(input.size(0),).long()).numpy()
-    # Initialize the interpreter
-    interpreter = tf.lite.Interpreter(model_path=str(tflite_file))
-    interpreter.allocate_tensors()
+# Listen their updates
+for i, d in enumerate(devices):
+    thread = threading.Thread(target=listenDevice, args=(d, i))
+    thread.daemon = True
+    thread.start()
 
-    input_details = interpreter.get_input_details()[0]
-    output_details = interpreter.get_output_details()[0]
+logger.debug("Final Best Accuracy: {}.".format(max_accu))
 
-    predictions = np.zeros((len(test_out_indices),), dtype=int)
-
-    for i, test_image_index in enumerate(test_out_indices):
-        test_image = input[test_image_index]
-        test_label = label[test_image_index]
-
-        # Check if the input type is quantized, then rescale input data to uint8
-        if input_details['dtype'] == np.uint8:
-            input_scale, input_zero_point = input_details["quantization"]
-            test_image = test_image / input_scale + input_zero_point
-
-        test_image = np.expand_dims(test_image, axis=0).astype(input_details["dtype"])
-        interpreter.set_tensor(input_details["index"], test_image)
-        interpreter.invoke()
-        output = interpreter.get_tensor(output_details["index"])[0]
-        predictions[i] = np.argmax(output)
-    return predictions
-
-# Helper function to evaluate a TFLite model on all images
-def evaluate_model(tflite_file):
-    global test_in
-    global test_out
-    input = torch.tensor(test_in).float()
-    label = (torch.from_numpy(test_out).view(input.size(0),).long()).numpy()
-    test_out_indices = range(test_in.shape[0])
-    predictions = run_tflite_model(tflite_file, test_out_indices)
-    accuracy = np.sum((predictions== label)) / len(test_in)
-
-    print('TFLite model accuracy is %.4f (Number of test samples=%d)' % (
-        accuracy, len(test_in)))
-
-## ---------- eva ----------
-TF_model = 'tfl_saved/whole_model.tflite' # specific file location
-evaluate_model(TF_model)
-whole_validate(test_in, test_out)
-
-os.system("xxd -i tfl_saved/whole_model.tflite tfl_saved/whole_model.cc")
-exit()
 plt.figure(1)
 plt.ion()
 plt.show()
@@ -1178,7 +1139,7 @@ plt.rc('legend', fontsize=font_sm)    # legend fontsize
 plt.rc('figure', titlesize=font_xl)   # fontsize of the figure title
 
 plot_graph()
-figname = f"newplots/centralize_ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-HN{size_hidden_nodes}-TT{train_time}-{experiment}_train.eps"
+figname = f"newplots/ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-HN{size_hidden_nodes}-TT{train_time}-{experiment}_train.eps"
 plt.savefig(figname, format='eps')
 logger.debug(f"Generated {figname}")
 
@@ -1193,7 +1154,7 @@ plt.rc('ytick', labelsize=font_sm)    # fontsize of the tick labels
 plt.rc('legend', fontsize=font_sm)    # legend fontsize
 plt.rc('figure', titlesize=font_xl)   # fontsize of the figure title
 plot_val_graph()
-figname2 = f"newplots/centralize_ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-HN{size_hidden_nodes}-TT{train_time}-{experiment}_val.eps"
+figname2 = f"newplots/ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-HN{size_hidden_nodes}-TT{train_time}-{experiment}_val.eps"
 plt.savefig(figname2, format='eps')
 print(f"Generated {figname2}")
 
@@ -1208,7 +1169,7 @@ plt.rc('ytick', labelsize=font_sm)    # fontsize of the tick labels
 plt.rc('legend', fontsize=font_sm)    # legend fontsize
 plt.rc('figure', titlesize=font_xl)   # fontsize of the figure title
 plot_train_accu()
-figname3 = f"newplots/centralize_ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-HN{size_hidden_nodes}-TT{train_time}-{experiment}_train_accu.eps"
+figname3 = f"newplots/ES{epoch_size}-BS{batch_size}-LR{learningRate}-M{momentum}-NH{number_hidden}-HS{hidden_size}-HN{size_hidden_nodes}-TT{train_time}-{experiment}_train_accu.eps"
 plt.savefig(figname3, format='eps')
 logger.debug(f"Generated {figname3}")
 
