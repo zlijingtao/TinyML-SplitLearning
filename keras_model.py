@@ -360,3 +360,26 @@ if DEBUG:
     print(modelS)
 
 # Implement keras to tensorflow lite
+
+## get representative data for quant
+def rep_dataset(): #test_in is global #FIXME change to tensor?
+    test_data = np.reshape(test_in, (total_samples - samples_per_device, 1, 13, 50))
+    for input_value in tf.data.Dataset.from_tensor_slices(test_data).batch(1).take(100):
+        yield [input_value]
+
+# converter = tf.lite.TFLiteConverter.from_saved_model(f"{saved_dir}/{transfered_model}.pb")
+converter = tf.lite.TFLiteConverter.from_keras_model(model)
+# --------- add quant here ------------
+# Convert using float fallback quantization
+converter.optimizations = [tf.lite.Optimize.DEFAULT]
+converter.representative_dataset = rep_dataset
+# #using integer-only quantization #TODO
+# converter.inference_input_type = tf.int8
+# converter.inference_output_type = tf.int8
+
+# write to tflite model
+tflite_model = converter.convert() #TODO: add quant
+tfl_model_path = f"./saved_results/EN_digits/{save_file_name}/whole_model.tflite"
+open(tfl_model_path, "wb").write(tflite_model)
+print("------ finished writing tflite model ------------")
+# print(f"tlf_model saved to: {saved_dir}/{transfered_model}.tflite")
