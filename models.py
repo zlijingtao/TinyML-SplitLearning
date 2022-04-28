@@ -112,13 +112,14 @@ class client_conv2d_model(nn.Module):
         super(client_conv2d_model, self).__init__()
 
         model_list = []
-        model_list.append(Reshape())
+        # model_list.append(Reshape())
         model_list.append(nn.Conv2d(1, 12, kernel_size = 3, stride = 2, bias = False))
         model_list.append(nn.ReLU())
 
         self.client = nn.Sequential(*model_list)
 
     def forward(self, x):
+        x = x.view(-1, 1, 13, 50)
         out = self.client(x)
         return out
 
@@ -131,10 +132,6 @@ class server_conv2d_model(nn.Module):
 
         # last_layer_input_size = input_size
         model_list = []
-        # last_layer_input_size = 800
-        # model_list.append(nn.Conv2d(4, 8, kernel_size = 3, stride = 1, bias = False))
-        # model_list.append(nn.BatchNorm2d(8))
-        # model_list.append(nn.ReLU())
         model_list.append(nn.Conv2d(12,30, kernel_size = 3, stride = 2, bias = False))
         model_list.append(nn.BatchNorm2d(30))
         model_list.append(nn.ReLU())

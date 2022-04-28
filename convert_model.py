@@ -1023,6 +1023,7 @@ class Mywhole_model(nn.Module):
         x=self.model_c(x)
         x=self.model_s(x)
         return x
+
 ## if c_model and s_model are loaded from saved models: 
 modelC= client_conv2d_model()
 modelS= server_conv2d_model(num_class = size_output_nodes, number_hidden = number_hidden, hidden_size = hidden_size)
