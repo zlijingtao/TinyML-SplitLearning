@@ -383,3 +383,55 @@ tfl_model_path = f"./saved_results/EN_digits/{save_file_name}/whole_model.tflite
 open(tfl_model_path, "wb").write(tflite_model)
 print("------ finished writing tflite model ------------")
 # print(f"tlf_model saved to: {saved_dir}/{transfered_model}.tflite")
+
+## evaluate tflite model
+## --------------- evaluate pytorch and tfl model ---------------
+# Helper function to run inference on a TFLite model
+def run_tflite_model(tflite_file, test_out_indices):
+    global test_out
+    global test_in
+
+    # process test out
+    input = torch.tensor(test_in).float()
+    label = (torch.from_numpy(test_out).view(input.size(0),).long()).numpy()
+    # Initialize the interpreter
+    interpreter = tf.lite.Interpreter(model_path=str(tflite_file))
+    interpreter.allocate_tensors()
+
+    input_details = interpreter.get_input_details()[0]
+    output_details = interpreter.get_output_details()[0]
+
+    predictions = np.zeros((len(test_out_indices),), dtype=int)
+
+    for i, test_image_index in enumerate(test_out_indices):
+        test_image = input[test_image_index]
+        test_label = label[test_image_index]
+
+        # Check if the input type is quantized, then rescale input data to uint8
+        if input_details['dtype'] == np.uint8:
+            input_scale, input_zero_point = input_details["quantization"]
+            test_image = test_image / input_scale + input_zero_point
+
+        test_image = np.expand_dims(test_image, axis=0).astype(input_details["dtype"])
+        interpreter.set_tensor(input_details["index"], test_image)
+        interpreter.invoke()
+        output = interpreter.get_tensor(output_details["index"])[0]
+        predictions[i] = np.argmax(output)
+    return predictions
+
+# Helper function to evaluate a TFLite model on all images
+def evaluate_model(tflite_file):
+    global test_in
+    global test_out
+    input = torch.tensor(test_in).float()
+    label = (torch.from_numpy(test_out).view(input.size(0),).long()).numpy()
+    test_out_indices = range(test_in.shape[0])
+    predictions = run_tflite_model(tflite_file, test_out_indices)
+    accuracy = np.sum((predictions== label)) / len(test_in)
+
+    print('TFLite model accuracy is %.4f (Number of test samples=%d)' % (
+        accuracy, len(test_in)))
+
+## ---------- eva ----------
+TF_model = tfl_model_path # specific file location
+evaluate_model(TF_model)
